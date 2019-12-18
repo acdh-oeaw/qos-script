@@ -1,0 +1,79 @@
+import json
+import logging
+import requests
+
+
+class Redmine:
+    customFields = None
+    envTypes = None
+    defaultTrackerId = 7
+    defaultProjectId = 8
+    defaultStatus = 1
+    baseUrl = None
+    auth = None
+
+    def __init__(self, baseUrl, auth):
+        self.baseUrl = baseUrl
+        self.auth = auth
+
+        # custom fields
+        self.customFields = {}
+        resp = requests.get(self.baseUrl + '/custom_fields.json', auth=self.auth)
+        data = resp.json()
+        for i in data['custom_fields']:
+            self.customFields[i['name']] = i
+
+        # environment types
+        self.envTypes = {}
+        resp = requests.get(self.baseUrl + '/issues.json', data={'cf_' + str(self.customFields['tags']['id']): 'environment type', 'limit': 100}, auth=self.auth)
+        data = resp.json()
+        for i in data['issues']:
+            self.envTypes[i['subject'].lower().split(' ')[0]] = i['id']
+
+    def createService(self, **kwargs):
+        data = dict(kwargs)
+        data = self.addCustomFields(data)
+        if 'tracker_id' not in data and self.defaultTrackerId is not None:
+            data['tracker_id'] = self.defaultTrackerId
+        if 'project_id' not in data and self.defaultProjectId is not None:
+            data['project_id'] = self.defaultProjectId
+        if 'status' not in data and self.defaultStatus is not None:
+            data['status'] = self.defaultStatus
+
+        resp = requests.post(self.baseUrl + '/issues.json', json={'issue': data}, auth=self.auth)
+        if resp.status_code != 201:
+            logging.debug(json.dumps({'issue': data}))
+            raise Exception('Redmine issue creation failed with code %d and response %s' % (resp.status_code, resp.text))
+        return resp.json()['issue']
+
+    def getService(self, id):
+        resp = requests.get('%s/issues/%s.json' % (self.baseUrl, str(id)), auth=self.auth)
+        if resp.status_code == 404:
+            raise LookupError()
+        if resp.status_code != 200:
+            raise Exception(str(resp.status_code) + ' ' + resp.text)
+        return resp.json()['issue']
+
+    def updateService(self, id, **kwargs):
+        data = dict(kwargs)
+        data = self.addCustomFields(data)
+        resp = requests.put('%s/issues/%d.json' % (self.baseUrl, id), json={'issue': data}, auth=self.auth)
+        if resp.status_code != 200:
+            logging.debug(json.dumps({'issue': data}))
+            raise Exception('Redmine issue update failed with code %d and response %s' % (resp.status_code, resp.text))
+        
+        if 'envType' in data:
+            envType = data['envType'].lower()
+            if envType in self.envTypes:
+                resp = requests.post('%s/issues/%d/relations.json' % (self.baseUrl, id), json={'relation': {'issue_to_id': self.envTypes[envType], 'relation_type': 'relates'}}, auth=self.auth)
+            else:
+                logging.error('  Unknown environment type ' + envType)
+
+    def addCustomFields(self, data):
+        customFields = []
+        for name, value in data.items():
+            if name in self.customFields:
+                customFields.append({'id': self.customFields[name]['id'], 'value': value})
+        data['custom_fields'] = customFields
+        return data
+

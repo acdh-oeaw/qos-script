@@ -1,0 +1,20 @@
+#!python3
+import argparse
+import logging
+
+from acdhDashboard.Redmine import Redmine
+from acdhDashboard.Host import Host
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at/')
+parser.add_argument('--redmineUser', default='qosScript')
+parser.add_argument('--redminePswd')
+parser.add_argument('hostName')
+args = parser.parse_args()
+
+rdmn = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd))
+logging.info('Redmine initialization successful')
+hst = Host()
+hst.maintainRedmine(rdmn, args.hostName)
+
