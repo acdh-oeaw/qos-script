@@ -25,7 +25,7 @@ class Redmine:
 
         # environment types
         self.envTypes = {}
-        resp = requests.get(self.baseUrl + '/issues.json', data={'cf_' + str(self.customFields['tags']['id']): 'environment type', 'limit': 100}, auth=self.auth)
+        resp = requests.get(self.baseUrl + '/issues.json', data={'cf_' + str(self.customFields['tags']['id']): 'environment type', 'status_id': '*', 'limit': 100}, auth=self.auth)
         data = resp.json()
         for i in data['issues']:
             self.envTypes[i['subject'].lower().split(' ')[0]] = i['id']
