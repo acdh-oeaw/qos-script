@@ -53,7 +53,7 @@ class Container:
                 if 'ID' not in i or i['ID'] != self.cfg['ID']:
                     i['ID'] = self.cfg['ID']
         with open(cfgFile, 'w') as f:
-            cfg = json.dump(cfg, f)
+            cfg = json.dump(cfg, f, indent=2)
 
     @staticmethod
     def asList(arg):
