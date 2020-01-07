@@ -59,7 +59,7 @@ class Container:
                 techStack += i['Tags']
         techStack = ' '.join(techStack)
 
-        redmine.updateService(self.cfg['ID'], endpoint=endpoint, envType=self.cfg['Type'], tech_stack=techStack, relations=relations)
+        redmine.updateService(self.cfg['ID'], server=self.server, endpoint=endpoint, envType=self.cfg['Type'], tech_stack=techStack, relations=relations)
 
     def maintainConfig(self, cfgFile):
         with open(cfgFile, 'r') as f:
