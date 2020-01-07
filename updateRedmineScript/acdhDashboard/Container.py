@@ -59,7 +59,11 @@ class Container:
                 techStack += i['Tags']
         techStack = ' '.join(techStack)
 
-        redmine.updateService(self.cfg['ID'], server=self.server, endpoint=endpoint, envType=self.cfg['Type'], tech_stack=techStack, relations=relations)
+        backendConnection = None
+        if 'BackendConnection' in self.cfg:
+            backendConnection = '\n'.join(self.asList(self.cfg['BackendConnection']))
+
+        redmine.updateService(self.cfg['ID'], server=self.server, endpoint=endpoint, envType=self.cfg['Type'], tech_stack=techStack, backend_connection=backendConnection, relations=relations)
 
     def maintainConfig(self, cfgFile):
         with open(cfgFile, 'r') as f:
