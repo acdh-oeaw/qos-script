@@ -1,8 +1,11 @@
 import docker
 import json
+import logging
 
 
 class Container:
+    idList = []
+
     cfg = None
     server = None
     account = None
@@ -16,7 +19,12 @@ class Container:
 
     def maintainRedmine(self, redmine, create):
         client = docker.from_env();
+        relations = []
 
+        if 'ID' in self.cfg and self.cfg['ID'] in Container.idList:
+            logging.error('Redmine ID %s used many times' % str(self.cfg['ID']))
+            relations.append({'id': self.cfg['ID'], 'type': 'relates'})
+            self.cfg['ID'] = None
         if 'ID' in self.cfg and self.cfg['ID'] is not None:
             try:
                 data = redmine.getService(int(self.cfg['ID']))
@@ -29,13 +37,21 @@ class Container:
             else:
                 raise LookupError('No Redmine ID')
         self.cfg['ID'] = data['id']
+        Container.idList.append(data['id'])
 
+        protocols = ['https']
+        if 'HTTPS' in self.cfg:
+            if str(self.cfg['HTTPS']).lower() == 'false':
+                protocols = ['http']
+            if str(self.cfg['HTTPS']) == 'both':
+                protocols = ['http', 'https']
         endpoint = ''
         if 'ServerName' in self.cfg:
-            endpoint += self.cfg['ServerName']
+            endpoint += '\n'.join([p + '://' + self.cfg['ServerName'] for p in protocols])
         if 'ServerAlias' in self.cfg:
-            endpoint += '\n' + '\n'.join(self.asList(self.cfg['ServerAlias']))
-            endpoint = endpoint.strip()
+            for i in self.asList(self.cfg['ServerAlias']):
+                endpoint += '\n' + '\n'.join([p + '://' + i for p in protocols])
+        endpoint = endpoint.strip()
 
         techStack = []
         for i in client.containers.get(self.containerName).image.history():
@@ -43,7 +59,7 @@ class Container:
                 techStack += i['Tags']
         techStack = ' '.join(techStack)
 
-        redmine.updateService(self.cfg['ID'], endpoint=endpoint, envType=self.cfg['Type'], tech_stack=techStack)
+        redmine.updateService(self.cfg['ID'], endpoint=endpoint, envType=self.cfg['Type'], tech_stack=techStack, relations=relations)
 
     def maintainConfig(self, cfgFile):
         with open(cfgFile, 'r') as f:

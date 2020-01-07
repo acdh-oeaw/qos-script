@@ -103,6 +103,10 @@ class Redmine:
             else:
                 logging.error('  Unknown environment type ' + envType)
 
+        if 'relations' in data:
+            for i in data['relations']:
+                resp = requests.post('%s/issues/%d/relations.json' % (self.baseUrl, id), json={'relation': {'issue_to_id': i['id'], 'relation_type': i['type']}}, auth=self.auth)
+
     def addCustomFields(self, data):
         customFields = []
         for name, value in data.items():
