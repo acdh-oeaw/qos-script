@@ -15,6 +15,10 @@ args = parser.parse_args()
 
 rdmn = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd))
 logging.info('Redmine initialization successful')
-hst = Host()
-hst.maintainRedmine(rdmn, args.hostName)
+rdmn.setupNotifications(False)
+try:
+    hst = Host()
+    hst.maintainRedmine(rdmn, args.hostName)
+finally:
+    rdmn.setupNotifications(True)
 

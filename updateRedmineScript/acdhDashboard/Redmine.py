@@ -1,6 +1,8 @@
 import json
 import logging
+import re
 import requests
+import urllib.parse
 
 
 class Redmine:
@@ -29,6 +31,38 @@ class Redmine:
         data = resp.json()
         for i in data['issues']:
             self.envTypes[i['subject'].lower().split(' ')[0]] = i['id']
+
+    def setupNotifications(self, on):
+        resp = requests.get(self.baseUrl + '/login')
+        authToken = re.sub('.*input type="hidden" name="authenticity_token" value="([^"]*)".*', '\\1', resp.text.replace('\n', ''))
+        resp = requests.post(self.baseUrl + '/login', cookies=resp.cookies, data={'authenticity_token': authToken, 'username': self.auth[0], 'password': self.auth[1]})
+
+        resp = requests.get(self.baseUrl + '/settings?tab=notifications', cookies=resp.cookies)
+        form = re.sub('</form>.*', '', re.sub('^.*<form action="/settings/edit[?]tab=notifications"[^>]*>', '', resp.text.replace('\n', '')))
+
+        issueUpdateRe = '<input type="checkbox" name="settings\\[notified_events\\]\\[\\]" value="issue_updated"[^/]*checked="checked"[^/]*/>'
+        if not on:
+            form = re.sub(issueUpdateRe, '', form)
+        elif re.search(issueUpdateRe, form) is None:
+            form += '<input type="checkbox" name="settings[notified_events][]" value="issue_updated" checked="checked" />'
+
+        chbs = form.split('<input type="checkbox"')[1:]
+        chbs = ['checked="checked"' in i for i in chbs]
+        form = re.split('<input|<textarea', form)[1:]
+        formFields = [re.sub('^.*name="([^"]*)".*$', '\\1', i) for i in form]
+        formValues = [re.sub('^.*>([^<]*)</textarea>.*$', '\\1', i) if re.search('</textarea>', i) else re.sub('^.*value="([^"]*)".*$', '\\1', i) for i in form]
+
+        data = ''
+        nChb = -1
+        for i in range(len(formValues)):
+            if re.search('type="checkbox"', form[i]):
+                nChb += 1
+                if not chbs[nChb]:
+                    continue
+            data += urllib.parse.quote(formFields[i], safe='') + '=' + urllib.parse.quote(formValues[i], safe='') + '&'
+        resp = requests.post('https://redmine.acdh.oeaw.ac.at/settings/edit?tab=notifications', cookies=resp.cookies, data=data)
+        if resp.status_code != 200:
+            raise Exception('setting up Redmine notifications failed')
 
     def createService(self, **kwargs):
         data = dict(kwargs)
