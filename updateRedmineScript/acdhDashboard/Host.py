@@ -2,13 +2,15 @@ import json
 import logging
 import os
 
+from acdhDashboard.Container import Container
+
 
 class Host:
 
     redmine = None
 
     def maintainRedmine(self, redmine, server):
-        for account in os.listdir('/home')
+        for account in os.listdir('/home'):
             cfgFile = os.path.join('/home', account, 'config.json')
             if os.path.isfile(cfgFile):
                 try:
@@ -24,6 +26,4 @@ class Host:
                             logging.error(str(e))
                 except:
                     logging.error('Can not parse ' + cfgFile)
-        with open(cfgFile, 'r') as f:
-            return Container(json.load(f)[n], server, account)
 

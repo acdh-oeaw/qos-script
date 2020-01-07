@@ -10,8 +10,12 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at/')
 parser.add_argument('--redmineUser', default='qosScript')
 parser.add_argument('--redminePswd')
+parser.add_argument('--verbose', action='store_true')
 parser.add_argument('hostName')
 args = parser.parse_args()
+
+if args.verbose:
+	logging.basicConfig(level=logging.INFO)
 
 rdmn = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd))
 logging.info('Redmine initialization successful')

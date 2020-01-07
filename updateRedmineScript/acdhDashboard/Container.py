@@ -19,7 +19,7 @@ class Container:
 
         if 'ID' in self.cfg and self.cfg['ID'] is not None:
             try:
-                data = redmine.getService(self.cfg['ID'])
+                data = redmine.getService(int(self.cfg['ID']))
             except LookupError:
                 self.cfg['ID'] = None
         if 'ID' not in self.cfg or self.cfg['ID'] is None:
@@ -30,7 +30,9 @@ class Container:
                 raise LookupError('No Redmine ID')
         self.cfg['ID'] = data['id']
 
-        endpoint = self.cfg['ServerName']
+        endpoint = ''
+        if 'ServerName' in self.cfg:
+            endpoint += self.cfg['ServerName']
         if 'ServerAlias' in self.cfg:
             endpoint += '\n' + '\n'.join(self.asList(self.cfg['ServerAlias']))
             endpoint = endpoint.strip()
@@ -51,7 +53,7 @@ class Container:
                 if 'ID' not in i or i['ID'] != self.cfg['ID']:
                     i['ID'] = self.cfg['ID']
         with open(cfgFile, 'w') as f:
-            cfg = json.dump(cfg, f)
+            cfg = json.dump(cfg, f, indent=2)
 
     @staticmethod
     def asList(arg):
