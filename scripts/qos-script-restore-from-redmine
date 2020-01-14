@@ -1,0 +1,87 @@
+#!python3
+
+# A quick & dirst script restoring data from the Redmine issues history.
+# Kept in the repo in case of similar action needed in the future
+
+import argparse
+import json
+import os
+import re
+import requests
+import shutil
+
+parser = argparse.ArgumentParser()
+parser.add_argument('redminePswd')
+args = parser.parse_args()
+
+baseUrl = 'https://redmine.acdh.oeaw.ac.at'
+auth = ('qosScript', args.redminePswd)
+qosUserId = 460
+
+customFields = {}
+resp = requests.get(baseUrl + '/custom_fields.json', auth=auth)
+data = resp.json()
+for i in data['custom_fields']:
+  customFields[i['name']] = i
+
+allDomains = []
+domains = {}
+for i in os.listdir('/home'):
+  i = os.path.join('/home', i, 'config.json')
+  if os.path.exists(i):
+    domains[i] = []
+    with open(i, 'r') as f:
+      cfg = json.load(f)
+    for c in cfg:
+      tmp = []
+      if 'ServerName' in c:
+        tmp.append(c['ServerName'])
+      if 'ServerAlias' in c:
+        if isinstance(c['ServerAlias'], list):
+          tmp += c['ServerAlias']
+        else:
+          tmp.append(c['ServerAlias'])
+      allDomains += tmp
+      domains[i].append(set(tmp))
+allDomains = set(allDomains)
+   
+for i in os.listdir('/home'):
+  i = os.path.join('/home', i, 'config.json')
+  if os.path.exists(i):
+    with open(i, 'r') as f:
+      cfg = json.load(f)
+    n = -1
+    for c in cfg:
+      n += 1
+      if 'ID' in c:
+        resp = requests.get(baseUrl + '/issues/' + str(c['ID']) + '.json?include=journals', auth=auth)
+        if resp.status_code == 200:
+          d = resp.json()['issue']['journals']
+          for j in d:
+            if j['user']['id'] == qosUserId:
+              for k in j['details']:
+                if k['property'] == 'cf' and int(k['name']) == 8:
+                  aliases = []
+                  dbs = []
+                  for l in k['old_value'].split('\n'):
+                    l = l.strip()
+                    if re.search('db:', l):
+                      dbs.append(l.replace('db:', '').strip())
+                    elif re.search('https?://', l):
+                      aliases.append(re.sub('^.*https?://([^/ :]+).*$', '\\1', l))
+                  c['RedmineLocation'] = k['old_value']
+                  if len(aliases) > 0:
+                    aliases = set(aliases) - allDomains
+                    allDomains = allDomains.union(aliases)
+                    if 'ServerAlias' not in c:
+                      c['ServerAlias'] = []
+                    if not isinstance(c['ServerAlias'], list):
+                      c['ServerAlias'] = [c['ServerAlias']]
+                    c['ServerAlias'] += list(aliases)
+                  if len(dbs) > 0:
+                    c['BackendConnection'] = '\n'.join(dbs)
+              break
+    shutil.copyfile(i, i + '_')
+    with open(i, 'w') as f:
+      cfg = json.dump(cfg, f, indent=2)
+

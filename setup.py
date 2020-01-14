@@ -3,9 +3,9 @@ from setuptools import setup, find_packages
 
 setup(
     name="acdhDashboard",
-    version="0.2.2",
+    version="0.2.3",
     packages=find_packages(),
-    scripts=['scripts/acdh-dashboard-update-redmine'],
+    scripts=['scripts/qos-script-update-redmine'],
     install_requires=[],
     author="Mateusz Zoltak",
     author_email="mzoltak@oeaw.ac.at",
