@@ -1,3 +1,4 @@
+import datetime
 import docker
 import json
 import logging
@@ -6,6 +7,7 @@ import os
 
 class Container:
     idList = []
+    expectedTrackerName = 'Service'
 
     cfg = None
     server = None
@@ -39,6 +41,8 @@ class Container:
                 self.maintainConfig(cfgFile) # the only situation when the config.json should be updated
             else:
                 raise LookupError('No Redmine ID')
+        if data['tracker']['name'] != Container.expectedTrackerName:
+            logging.error('Redmine issue %d has a wrong tracker %s' % (int(self.cfg['ID']), data['tracker']['name']))
         Container.idList.append(int(self.cfg['ID']))
 
         protocols = ['https']
@@ -83,7 +87,8 @@ class Container:
             container_name=self.cfg['Name'], 
             endpoint=endpoint, 
             envType=self.cfg['Type'], 
-            project_name=self.account, 
+            project_name=self.account,
+            qos_update_date=str(datetime.date.today()),
             relations=relations,
             server=self.server, 
             ssh_users=sshUsers,
