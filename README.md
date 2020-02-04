@@ -1,3 +1,4 @@
-# dashboard
+# Quality of Service script #15859
 
-ACDH Dashboard #13501
+script reading information from config scripts writing to corresponding redmine issues
+
