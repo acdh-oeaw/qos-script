@@ -85,7 +85,7 @@ class Redmine:
         if resp.status_code == 404:
             raise LookupError()
         if resp.status_code != 200:
-            raise Exception(str(resp.status_code) + ' ' + resp.text)
+            raise Exception(str(resp.status_code) + ' ' + resp.text + ' (ID ' + str(id) + ')')
         return resp.json()['issue']
 
     def updateService(self, id, **kwargs):
