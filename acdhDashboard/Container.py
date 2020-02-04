@@ -78,9 +78,10 @@ class Container:
         keysFile = os.path.join('/home', self.account, '.ssh/authorized_keys')
         if os.path.exists(keysFile):
             with open(keysFile) as f:
-                l = f.readline().split(' ')
-                if len(l) > 2:
-                    sshUsers += l[2].strip() + '\n'
+                for l in f.readlines():
+                    l = l.split(' ')
+                    if len(l) > 2:
+                        sshUsers += (l[2].strip() + '\n')
         sshUsers = sshUsers.strip()
 
         redmine.updateService(
