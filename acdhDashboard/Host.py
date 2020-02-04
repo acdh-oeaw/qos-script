@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import traceback
 
 from acdhDashboard.Container import Container
 
@@ -20,10 +21,10 @@ class Host:
                         try:
                             logging.info('Processing container %s-%s' % (account, c['Name']))
                             cntnr = Container(c, server, account)
-                            cntnr.maintainRedmine(redmine, True)
-                            cntnr.maintainConfig(cfgFile)
+                            cntnr.maintainRedmine(redmine, True, cfgFile)
                         except Exception as e:
-                            logging.error(str(e))
+                            logging.error(traceback.format_exc())
                 except:
                     logging.error('Can not parse ' + cfgFile)
+                    logging.error(str(e))
 

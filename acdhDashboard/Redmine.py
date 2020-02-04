@@ -89,7 +89,10 @@ class Redmine:
         return resp.json()['issue']
 
     def updateService(self, id, **kwargs):
-        data = dict(kwargs)
+        data = {}
+        for name, value in dict(kwargs).items():
+            if value is not None: 
+                data[name] = value
         data = self.addCustomFields(data)
         resp = requests.put('%s/issues/%d.json' % (self.baseUrl, id), json={'issue': data}, auth=self.auth)
         if resp.status_code != 200:
@@ -110,7 +113,7 @@ class Redmine:
     def addCustomFields(self, data):
         customFields = []
         for name, value in data.items():
-            if name in self.customFields:
+            if name in self.customFields and value is not None:
                 customFields.append({'id': self.customFields[name]['id'], 'value': value})
         data['custom_fields'] = customFields
         return data

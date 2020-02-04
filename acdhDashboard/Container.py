@@ -1,6 +1,7 @@
 import docker
 import json
 import logging
+import os
 
 
 class Container:
@@ -17,7 +18,7 @@ class Container:
         self.account = account
         self.containerName = account + '-' + self.cfg['Name']
 
-    def maintainRedmine(self, redmine, create):
+    def maintainRedmine(self, redmine, create, cfgFile):
         client = docker.from_env();
         relations = []
 
@@ -34,10 +35,11 @@ class Container:
             if create:
                 subject = 'Automatically created service issue for %s-%s@%s' % (self.account, self.cfg['Name'], self.server)
                 data = redmine.createService(subject=subject, server=self.server)
+                self.cfg['ID'] = int(data['id'])
+                self.maintainConfig(cfgFile) # the only situation when the config.json should be updated
             else:
                 raise LookupError('No Redmine ID')
-        self.cfg['ID'] = data['id']
-        Container.idList.append(data['id'])
+        Container.idList.append(int(self.cfg['ID']))
 
         protocols = ['https']
         if 'HTTPS' in self.cfg:
@@ -54,16 +56,39 @@ class Container:
         endpoint = endpoint.strip()
 
         techStack = []
-        for i in client.containers.get(self.containerName).image.history():
-            if i['Tags'] is not None:
-                techStack += i['Tags']
+        try:
+            for i in client.containers.get(self.containerName).image.history():
+                if i['Tags'] is not None:
+                    techStack += i['Tags']
+        except Exception as e:
+            logging.error(str(e))
         techStack = ' '.join(techStack)
 
         backendConnection = None
         if 'BackendConnection' in self.cfg:
             backendConnection = '\n'.join(self.asList(self.cfg['BackendConnection']))
 
-        redmine.updateService(self.cfg['ID'], server=self.server, endpoint=endpoint, envType=self.cfg['Type'], tech_stack=techStack, backend_connection=backendConnection, relations=relations)
+        sshUsers = ''
+        keysFile = os.path.join('/home', self.account, '.ssh/authorized_keys')
+        if os.path.exists(keysFile):
+            with open(keysFile) as f:
+                l = f.readline().split(' ')
+                if len(l) > 2:
+                    sshUsers += l[2].strip() + '\n'
+        sshUsers = sshUsers.strip()
+
+        redmine.updateService(
+            int(self.cfg['ID']), 
+            backend_connection=backendConnection, 
+            container_name=self.cfg['Name'], 
+            endpoint=endpoint, 
+            envType=self.cfg['Type'], 
+            project_name=self.account, 
+            relations=relations,
+            server=self.server, 
+            ssh_users=sshUsers,
+            tech_stack=techStack
+        )
 
     def maintainConfig(self, cfgFile):
         with open(cfgFile, 'r') as f:
