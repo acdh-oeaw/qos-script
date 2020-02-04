@@ -28,14 +28,16 @@ class Container:
             logging.error('Redmine ID %s used many times' % str(self.cfg['ID']))
             relations.append({'id': self.cfg['ID'], 'type': 'relates'})
             self.cfg['ID'] = None
-        if 'ID' in self.cfg and self.cfg['ID'] is not None:
+        if 'ID' in self.cfg and self.cfg['ID'] is not None and self.cfg['ID'] != '':
             try:
                 data = redmine.getService(int(self.cfg['ID']))
             except LookupError:
                 self.cfg['ID'] = None
-        if 'ID' not in self.cfg or self.cfg['ID'] is None:
+            except ValueError:
+                self.cfg['ID'] = None
+        if 'ID' not in self.cfg or self.cfg['ID'] is None or self.cfg['ID'] == '':
             if create:
-                subject = 'Automatically created service issue for %s-%s@%s' % (self.account, self.cfg['Name'], self.server)
+                subject = 'Automatically created service issue for %s@%s' % (self.containerName, self.server)
                 data = redmine.createService(subject=subject, server=self.server)
                 self.cfg['ID'] = int(data['id'])
                 self.maintainConfig(cfgFile) # the only situation when the config.json should be updated
