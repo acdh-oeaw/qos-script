@@ -84,6 +84,16 @@ class Container:
                         sshUsers += (l[2].strip() + '\n')
         sshUsers = sshUsers.strip()
 
+        if 'InContainerApps' in self.cfg:
+            for inId, inCfg in self.cfg['InContainerApps'].items():
+                try:
+                    redmine.getService(int(inId))
+                    relations.append({'id': inId, 'type': 'relates'})
+                except LookupError:
+                    logging.error('Redmine issue %d InContainerApps refers to a non-existing Redmine issue %s' % (int(self.cfg['ID']), str(inId)))
+                except ValueError:
+                    logging.error('Redmine issue %d contains wrong InContainerApps key %s' % (int(self.cfg['ID']), str(inId)))
+
         redmine.updateService(
             int(self.cfg['ID']), 
             backend_connection=backendConnection, 
