@@ -9,7 +9,7 @@ class Redmine:
     customFields = None
     envTypes = None
     defaultTrackerId = 7
-    defaultProjectId = 8
+    defaultProjectId = 164
     defaultStatus = 1
     baseUrl = None
     auth = None
