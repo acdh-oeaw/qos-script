@@ -88,7 +88,8 @@ class Container:
             for inId, inCfg in self.cfg['InContainerApps'].items():
                 try:
                     redmine.getService(int(inId))
-                    relations.append({'id': inId, 'type': 'relates'})
+                    relations.append({'id': int(inId), 'type': 'relates'})
+                    redmine.updateService(int(inId), qos_update_date=str(datetime.date.today()))
                 except LookupError:
                     logging.error('Redmine issue %d InContainerApps refers to a non-existing Redmine issue %s' % (int(self.cfg['ID']), str(inId)))
                 except ValueError:
