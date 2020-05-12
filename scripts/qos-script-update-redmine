@@ -10,6 +10,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at/')
 parser.add_argument('--redmineUser', default='qosScript')
 parser.add_argument('--redminePswd')
+parser.add_argument('--account', help='process only a given system account')
 parser.add_argument('--verbose', action='store_true')
 parser.add_argument('hostName')
 args = parser.parse_args()
@@ -22,7 +23,7 @@ logging.info('Redmine initialization successful')
 rdmn.setupNotifications(False)
 try:
     hst = Host()
-    hst.maintainRedmine(rdmn, args.hostName)
+    hst.maintainRedmine(rdmn, args.hostName, args.account)
 finally:
     rdmn.setupNotifications(True)
 

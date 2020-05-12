@@ -108,7 +108,7 @@ class Redmine:
 
         if 'relations' in data:
             for i in data['relations']:
-                resp = requests.post('%s/issues/%d/relations.json' % (self.baseUrl, id), json={'relation': {'issue_to_id': i['id'], 'relation_type': i['type']}}, auth=self.auth)
+                resp = requests.post('%s/issues/%d/relations.json' % (self.baseUrl, id), json={'relation': {'issue_to_id': int(i['id']), 'relation_type': i['type']}}, auth=self.auth)
 
     def addCustomFields(self, data):
         customFields = []
