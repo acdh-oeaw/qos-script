@@ -8,8 +8,6 @@ from acdhDashboard.Container import Container
 
 class Host:
 
-    redmine = None
-
     def maintainRedmine(self, redmine, server, account=None):
         if account is not None:
             accounts = [account]
