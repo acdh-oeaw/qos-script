@@ -1,3 +1,4 @@
+import docker
 import json
 import logging
 import os
@@ -13,32 +14,35 @@ class Rancher(ICluster):
 
     server = None
     apiBase = None
+    project = None
     session = None
 
-    def __init__(self, server, apiBase, user, pswd):
+    def __init__(self, server, apiBase, user, pswd, project=None):
         self.server = server
         self.apiBase = apiBase
+        self.project = project
+        
+        if self.server is None:
+            self.server = re.sub('^.*[/.]', '', re.sub('([.]arz|[.]acdh|[.]acdh-dev)?[.]oeaw[.].*$', '', self.server))
+        
         self.session = requests.Session()
         self.session.auth = (user, pswd)
-
-    def harvest(self, backend: IBackend):
+        
+    def harvest(self):
+        data = []
         resp = self.session.get(self.apiBase + '/projects')
         for project in resp.json()['data']:
+            if self.project is not None and project['name'] != self.project:
+                continue
             try:
-                logging.info('Processing project ' + project['name'])
+                logging.info('[%s] Processing project %s' % (self.server, project['name']))
                 resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
                 for workload in resp.json()['data']:
-                    logging.info('Processing worload ' + workload['name'])
-                    data = self.processWorkload(workload, project)
-                    print(data)
-                    #try:
-                    #    rec = backend.findRecord(data)
-                    #    rec.update(data)
-                    #except:
-                    #    backend.createRecord(data)
-                    #self.updateConfigWithId(cfgFile, data['name'], data['id'])
+                    logging.info('[%s]  Processing workload %s' % (self.server, workload['name']))
+                    data.append(self.processWorkload(workload, project))
             except Exception:
-                logging.error(traceback.format_exc())
+                logging.error('[%s] %s' % (self.server, traceback.format_exc()))
+        return data
 
     def processWorkload(self, cfg, pcfg):
         name = cfg['name']
@@ -66,7 +70,7 @@ class Rancher(ICluster):
             users.append(username + ' (' + user['userId'] + '): ' + user['roleTemplateId'])
         users = '\n'.join(set(users))
 
-        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': self.server}
+        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': self.server, 'project': pcfg['name']}
 
 class Portainer(ICluster):
 
@@ -75,10 +79,17 @@ class Portainer(ICluster):
     session = None
     users = None
     teams = None
+    projectsPath = None
+    stack = None
 
-    def __init__(self, server, apiBase, user, pswd):
+    def __init__(self, server, apiBase, user, pswd, projectsPath, stack=None):
         self.server = server
         self.apiBase = apiBase
+        self.projectsPath = projectsPath
+        self.stack = stack
+
+        if self.server is None:
+            self.server = re.sub('^.*[/.]', '', re.sub('([.]arz|[.]acdh|[.]acdh-dev)?[.]oeaw[.].*$', '', self.server))
 
         resp = requests.post(apiBase + '/auth', data=json.dumps({'Username': user, 'Password': pswd}))
         self.session = requests.Session()
@@ -99,30 +110,27 @@ class Portainer(ICluster):
             resp = self.session.get(apiBase + '/teams/' + str(team['Id']) + '/memberships')
             self.teams[str(team['Id'])] = [self.users[str(i['UserID'])] for i in resp.json()]
 
-    def harvest(self, backend: IBackend):
+    def harvest(self):
+        data = []
         resp = self.session.get(self.apiBase + '/stacks')
         for stack in resp.json():
+            if self.stack is not None and stack['Name'] != self.stack:
+                continue
             try:
-                logging.info('Processing stack ' + stack['Id'])
+                logging.info('[%s] Processing stack %s' % (self.server, str(stack['Id'])))
                 users = self.getUsers(stack)
 
                 resp = self.session.get(self.apiBase + '/stacks/' + str(stack['Id']) + '/file')
                 cfg = yaml.safe_load(resp.json()['StackFileContent'])
                 for name, ccfg in cfg['services'].items():
-                    logging.info('Processing container ' + stack['Name'] + '-' + name)
-                    data = self.processContainer(name, ccfg)
-                    print(data)
-                    #try:
-                    #    rec = backend.findRecord(data)
-                    #    rec.update(data)
-                    #except:
-                    #    backend.createRecord(data)
-                    #self.updateConfigWithId(cfgFile, data['name'], data['id'])
+                    logging.info('[%s]  Processing container %s' % (self.server, stack['Name'] + '-' + name))
+                    data.append(self.processContainer(name, ccfg, stack))
             except Exception:
-                logging.error(traceback.format_exc())
+                logging.error('[%s] %s' % (self.server, traceback.format_exc()))
+        return data
 
     def processContainer(self, name, ccfg, scfg):
-        name = stack['Name'] + '-' + name
+        name = scfg['Name'] + '-' + name
 
         ccfg['labels'] = self.parseLabels(ccfg)
 
@@ -130,24 +138,34 @@ class Portainer(ICluster):
         if redmineId is None:
             redmineId = self.getLabel(ccfg, 'redmineId')
             if redmineId is not None:
-                logging.warning('container ' + name + ' uses non-standard label for the redmine issue id')
+                logging.warning('[%s]  container %s-%s uses non-standard label for the redmine issue id' % (self.server, scfg['Name'], name))
 
         endpoint = self.getEndpoint(ccfg)
 
         if 'image' in ccfg:
             techStack = ccfg['image']
         elif isinstance(ccfg['build'], str):
-            techStack = 'local build with context ' + ccfg['build']
+            techStack = ' '.join(self.inspectLocalDockerfile(scfg['ProjectPath'], ccfg['build']))
         else:
-            techStack = 'local build with context ' + ccfg['build']['context']
+            techStack = ' '.join(self.inspectLocalDockerfile(scfg['ProjectPath'], ccfg['build']['context']))
 
         inContainerApps = self.getLabel(ccfg, 'inContainerApps')
-
+        
         backendConnection = self.getLabel(ccfg, 'backendConnection')
 
-        users = '\n'.join([i['Name'] for i in users])
+        users = '\n'.join([i['Name'] for i in self.getUsers(scfg)])
 
-        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'pid': scfg['Id'], 'server': self.server}
+        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'pid': scfg['Id'], 'server': self.server, 'project': scfg['Name']}
+
+    def inspectLocalDockerfile(self, path, context):
+        dockerfile = os.path.join(self.projectsPath, re.sub('^/', '', path), context, 'Dockerfile')
+        if os.path.exists(dockerfile):
+            with open(dockerfile) as f:
+                for i in f:
+                    i = i.strip()
+                    if i.upper().replace('\t', ' ').startswith('FROM '):
+                        return [dockerfile, i[4:].strip()]
+        return [dockerfile]
 
     def getUsers(self, stack):
         if 'ResourceControl' not in stack:
@@ -196,8 +214,9 @@ class DockerTools(ICluster):
         else:
             self.accounts = os.listdir('/home')
 
-    def harvest(self, backend: IBackend):
+    def harvest(self):
         client = docker.from_env();
+        data = []
         for account in self.accounts:
             cfgFile = os.path.join('/home', account, 'config.json')
             if os.path.isfile(cfgFile):
@@ -206,27 +225,15 @@ class DockerTools(ICluster):
                         cfg = json.load(f)
                     for c in cfg:
                         try:
-                            logging.info('Processing container %s-%s' % (account, c['Name']))
-                            data = self.processContainer(client, c, account)
-                            print(data)
-                            #try:
-                            #    rec = backend.findRecord(data)
-                            #    rec.update(data)
-                            #except:
-                            #    backend.createRecord(data)
-                            #self.updateConfigWithId(cfgFile, data['name'], data['id'])
+                            logging.info('[%s] Processing container %s-%s' % (self.server, account, c['Name']))
+                            data.append(self.processContainer(client, c, account))
+                        except docker.errors.NotFound:
+                            logging.error("[%s]  Container %s-%s is defined in config.json but doesn't exist" % (self.server, account, c['Name']))
                         except Exception as e:
-                            logging.error(traceback.format_exc())
+                            logging.error('[%s] %s' % (self.server, traceback.format_exc()))
                 except:
-                    logging.error('Can not parse ' + cfgFile)
-                    logging.error(str(e))
-
-
-    def __init__(self, cfg, server, account):
-        self.cfg = cfg
-        self.server = server
-        self.account = account
-        self.containerName = account + '-' + self.cfg['Name']
+                    logging.error('[%s] Can not parse %s: %s' % (self.server, cfgFile, str(e)))
+        return data
 
     def processContainer(self, client, cfg, account):
         id = cfg['ID'] if 'ID' in cfg else None
@@ -250,15 +257,12 @@ class DockerTools(ICluster):
         endpoint = endpoint.strip()
 
         techStack = []
-        try:
-            for i in client.containers.get(self.containerName).image.history():
-                if i['Tags'] is not None:
-                    techStack += i['Tags']
-        except Exception as e:
-            logging.error(str(e))
+        for i in client.containers.get(name).image.history():
+            if i['Tags'] is not None:
+                techStack += i['Tags']
         techStack = ' '.join(techStack)
 
-        inContainerApps = cfg['inContainerApps'] if inContainerApps in cfg else None
+        inContainerApps = cfg['inContainerApps'] if 'inContainerApps' in cfg else None
 
         backendConnection = None
         if 'BackendConnection' in cfg:
@@ -274,7 +278,7 @@ class DockerTools(ICluster):
                         users += (l[2].strip() + '\n')
         users = users.strip()
 
-        return {'name': name, 'Id': id, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': self.server}
+        return {'name': name, 'id': id, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': self.server, 'project': account}
 
     def updateConfigWithId(self, cfgFile, name, id):
         with open(cfgFile, 'r') as f:

@@ -1,29 +1,96 @@
 #!python3
 import argparse
+import json
 import logging
+import logging.handlers
+import sys
+import tempfile
+import traceback
 
-from acdhDashboard.Redmine import Redmine
-from acdhDashboard.Host import Host
-
+from acdhQos.backend import *
+from acdhQos.cluster import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at/')
 parser.add_argument('--redmineUser', default='qosScript')
 parser.add_argument('--redminePswd')
-parser.add_argument('--account', help='process only a given system account')
+parser.add_argument('--redmineLogIssueId', default=18419)
+parser.add_argument('--rancherUrl', default='https://rancher.acdh-dev.oeaw.ac.at/v3')
+parser.add_argument('--rancherUser', default='token-sbz8q')
+parser.add_argument('--rancherPswd')
+parser.add_argument('--rancherProject', help='limits Rancher processing to a single project of a given name')
+parser.add_argument('--rancherServer', default='acdh-cluster', help='server name to be used for the Rancher')
+parser.add_argument('--portainerUrl', default='https://portainer.sisyphos.arz.oeaw.ac.at/api')
+parser.add_argument('--portainerUser', default='admin')
+parser.add_argument('--portainerPswd')
+parser.add_argument('--portainerProjectPath', default='/home/portainer/shares')
+parser.add_argument('--portainerStack', help='limits Portainer processing to a single stack of a given name')
+parser.add_argument('--portainerServer', help='server name to be used for the Portainer (by default derived from the portainerUrl)')
+parser.add_argument('--dockerToolsAccount', help='limits docker-tools processing to a single user account of a given name')
+parser.add_argument('--dockerToolsServer', help='server name to be used for the docker-tools')
+parser.add_argument('--rancher', action='store_true', help='process Rancher')
+parser.add_argument('--portainer', action='store_true', help='process Portainer')
+parser.add_argument('--dockerTools', action='store_true', help='process docker-tools')
 parser.add_argument('--verbose', action='store_true')
-parser.add_argument('hostName')
 args = parser.parse_args()
 
-if args.verbose:
-	logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+# log on a console
+lh1 = logging.StreamHandler(sys.stdout)
+lh1.setLevel(logging.DEBUG if args.verbose else logging.INFO)
+logger.addHandler(lh1)
+# file log which will be stored in the `args.redmineLogIssueId` issue description
+(fh, logPath) = tempfile.mkstemp()
+lh2 = logging.FileHandler(logPath)
+lh2.setLevel(logging.WARNING)
+lh2.setFormatter(logging.Formatter('#%(levelname)s: %(message)s'))
+logger.addHandler(lh2)
 
-rdmn = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd))
-logging.info('Redmine initialization successful')
-rdmn.setupNotifications(False)
+backend = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd), logIssueId=args.redmineLogIssueId)
+backend.begin()
+logging.info('Backend initialization successful')
+
 try:
-    hst = Host()
-    hst.maintainRedmine(rdmn, args.hostName, args.account)
+    data = []
+    
+    if args.dockerTools:
+        try:
+            d = DockerTools(args.dockerToolsServer, args.dockerToolsAccount)
+            data += d.harvest()
+        except Exception:
+            logging.error('[%s] %s' % (args.dockerToolsServer, traceback.format_exc()))
+    if args.rancher:
+        try:
+            r = Rancher(args.rancherServer, args.rancherUrl, args.rancherUser, args.rancherPswd, args.rancherProject)
+            data += r.harvest()
+        except Exception:
+            logging.error('[%s] %s' % (args.rancherServer, traceback.format_exc()))
+    if args.portainer:
+        try:
+            p = Portainer(args.portainerServer, args.portainerUrl, args.portainerUser, args.portainerPswd, args.portainerProjectPath, args.portainerStack)
+            data += p.harvest()
+        except Exception:
+            logging.error('[%s] %s' % (args.portainerServer, traceback.format_exc()))
+
+    for i in data:
+        try:
+            record = backend.findRecord(i)
+            record.update(i)
+            # It doesn't make sense to create backend records for non-existing Portainer and Rancher containers
+            #   as it would require adjusting Portainer and Rancher config (stroring record id in the service metadata). 
+            #   Technically it can be done but as Portainer and Rancher are not reference sources of their services' 
+            #   configuration, such a change will be overwritten sooner or later leading to duplication of backend records.
+            # Instead errors log is being passed to backend's `end()` method which allows to review spotted problems
+            #   and fix them at their source.
+        except RecordNotFound:
+            logging.error('[%s] Backend record not found for: %s' % (i['server'], json.dumps(i)))
+        except RecordDuplicated as e:
+            logging.error('[%s] Backend record %s duplicated with: %s' % (i['server'], str(e.id), json.dumps(e.data)))
+except Exception:
+    logging.error(traceback.format_exc())
 finally:
-    rdmn.setupNotifications(True)
+    with open(logPath) as fd:
+        backend.end(fd.read())
+    os.unlink(logPath)
 

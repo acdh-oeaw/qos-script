@@ -1,4 +1,5 @@
 # Quality of Service script #15859
 
-script reading information from config scripts writing to corresponding redmine issues
+A script collecting information about services deployed on the ACDH infrastructure and storing them into a database-like backend (here and now Redmine).
+
 
