@@ -81,7 +81,7 @@ class Redmine(IBackend):
         # split the new log into entries and extract processed servers
         log = log.strip()[1:].split('\n#')
         log = [i.strip() for i in log if i.strip() != '']
-        procServers = set([self.extractServerFromLogLine(i) for i in log])
+        procServers = set([self.extractServerFromLogLine(i) for i in log if self.extractServerFromLogLine(i) != ''])
 
         # combine logs by keeping all lines from the old ones which do not apply to
         # the servers processed in the new log and adding a complete new log to it
