@@ -37,10 +37,11 @@ class Redmine(IBackend):
     defaultProjectId = None
     defaultStatus = None
     defaultPrority = None
+    inContainerAppCategory = None
     baseUrl = None
     session = None
 
-    def __init__(self, baseUrl, auth, logIssueId=None, defTrackerId=7, defProjectId=164, defStatus=1, defPrority=2):
+    def __init__(self, baseUrl, auth, logIssueId=None, defTrackerId=7, defProjectId=164, defStatus=1, defPrority=2, inContainerAppCategory=52):
         self.baseUrl = baseUrl
         self.session = requests.Session()
         self.session.auth = auth
@@ -49,6 +50,7 @@ class Redmine(IBackend):
         self.defaultProjectId = defProjectId
         self.defaultStatus = defStatus
         self.defaultPrority = defPrority
+        self.inContainerAppCategory = inContainerAppCategory
         
         # custom fields
         self.customFields = {}
@@ -226,7 +228,7 @@ class RedmineRecord(IRecord):
                 try:
                     app = self.redmine.findRecord({'id': inId})
                     relations.append({'id': inId, 'type': 'relates'})
-                    app.update({'id': inId})
+                    app.update({'id': inId, 'Service categories': [self.redmine.inContainerAppCategory]})
                 except RecordNotFound:
                     logging.error('[%s] Redmine issue %d inContainerApps refers to a non-existing Redmine issue %s' % (newData['server'], self.id, str(inId)))
             del newData['inContainerApps']
