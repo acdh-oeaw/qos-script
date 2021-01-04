@@ -87,6 +87,8 @@ try:
             logging.error('[%s] Backend record not found for: %s' % (i['server'], json.dumps(i)))
         except RecordDuplicated as e:
             logging.error('[%s] Backend record %s duplicated with: %s' % (i['server'], str(e.id), json.dumps(e.data)))
+        except RecordError as e:
+            logging.error('[%s] %s' % (i['server'], str(e)))
 except Exception:
     logging.error(traceback.format_exc())
 finally:
