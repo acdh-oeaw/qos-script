@@ -9,7 +9,6 @@ import yaml
 
 from acdhQos.interface import *
 
-
 class Rancher(ICluster):
 
     server = None
@@ -38,7 +37,7 @@ class Rancher(ICluster):
                 logging.info('[%s] Processing project %s' % (self.server, project['name']))
                 resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
                 for workload in resp.json()['data']:
-                    logging.info('[%s]  Processing workload %s' % (self.server, workload['name']))
+                    logging.info('[%s] Processing workload %s' % (self.server, workload['name']))
                     data.append(self.processWorkload(workload, project))
             except Exception:
                 logging.error('[%s] %s' % (self.server, traceback.format_exc()))
@@ -123,7 +122,7 @@ class Portainer(ICluster):
                 resp = self.session.get(self.apiBase + '/stacks/' + str(stack['Id']) + '/file')
                 cfg = yaml.safe_load(resp.json()['StackFileContent'])
                 for name, ccfg in cfg['services'].items():
-                    logging.info('[%s]  Processing container %s' % (self.server, stack['Name'] + '-' + name))
+                    logging.info('[%s] Processing container %s' % (self.server, stack['Name'] + '-' + name))
                     data.append(self.processContainer(name, ccfg, stack))
             except Exception:
                 logging.error('[%s] %s' % (self.server, traceback.format_exc()))
@@ -138,7 +137,7 @@ class Portainer(ICluster):
         if redmineId is None:
             redmineId = self.getLabel(ccfg, 'redmineId')
             if redmineId is not None:
-                logging.warning('[%s]  container %s-%s uses non-standard label for the redmine issue id' % (self.server, scfg['Name'], name))
+                logging.warning('[%s] container %s-%s uses non-standard label for the redmine issue id' % (self.server, scfg['Name'], name))
 
         endpoint = self.getEndpoint(ccfg)
 
@@ -149,9 +148,17 @@ class Portainer(ICluster):
         else:
             techStack = ' '.join(self.inspectLocalDockerfile(scfg['ProjectPath'], ccfg['build']['context']))
 
-        inContainerApps = self.getLabel(ccfg, 'inContainerApps')
+        inContainerApps = self.getLabel(ccfg, 'InContainerApps')
+        if inContainerApps is None:
+            inContainerApps = self.getLabel(ccfg, 'inContainerApps')
+            if inContainerApps is not None:
+                logging.warning('[%s] container %s-%s uses non-standard label for the InContainerApps' % (self.server, scfg['Name'], name))
         
-        backendConnection = self.getLabel(ccfg, 'backendConnection')
+        backendConnection = self.getLabel(ccfg, 'BackendConnection')
+        if backendConnection is None:
+            backendConnection = self.getLabel(ccfg, 'backendConnection')
+            if backendConnection is not None:
+                logging.warning('[%s] container %s-%s uses non-standard label for the BackendConnection' % (self.server, scfg['Name'], name))
 
         users = '\n'.join([i['Name'] for i in self.getUsers(scfg)])
 
@@ -228,7 +235,7 @@ class DockerTools(ICluster):
                             logging.info('[%s] Processing container %s-%s' % (self.server, account, c['Name']))
                             data.append(self.processContainer(client, c, account))
                         except docker.errors.NotFound:
-                            logging.error("[%s]  Container %s-%s is defined in config.json but doesn't exist" % (self.server, account, c['Name']))
+                            logging.error("[%s] Container %s-%s is defined in config.json but doesn't exist" % (self.server, account, c['Name']))
                         except Exception as e:
                             logging.error('[%s] %s' % (self.server, traceback.format_exc()))
                 except:
@@ -262,7 +269,7 @@ class DockerTools(ICluster):
                 techStack += i['Tags']
         techStack = ' '.join(techStack)
 
-        inContainerApps = cfg['inContainerApps'] if 'inContainerApps' in cfg else None
+        inContainerApps = cfg['InContainerApps'] if 'InContainerApps' in cfg else None
 
         backendConnection = None
         if 'BackendConnection' in cfg:

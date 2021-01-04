@@ -26,6 +26,9 @@ class RecordDuplicated(Exception):
         self.id = id
         self.data = data
 
+class RecordError(Exception):
+    pass
+
 class Redmine(IBackend):
     customFields = None
     envTypes = None
@@ -75,25 +78,22 @@ class Redmine(IBackend):
         resp = self.session.get(url)
         if resp.status_code != 200:
             raise Exception('Fetching Redmine log issue failed')
-        desc = resp.json()['issue']['description'].strip()[1:].split('\n*')
-        desc = [i.strip() for i in desc if i.strip() != '']
-        
-        # split the new log into entries and extract processed servers
-        log = log.strip()[1:].split('\n#')
-        log = [i.strip() for i in log if i.strip() != '']
-        procServers = set([self.extractServerFromLogLine(i) for i in log if self.extractServerFromLogLine(i) != ''])
+        desc = self.parseRedmineDescription(resp.json()['issue']['description'])
+        log = self.parseLog(log)
+        # now every desc and log element is an array of [severity, server, message, data]
+
+        procServers = set([i[1] for i in log if i[1] != ''])
 
         # combine logs by keeping all lines from the old ones which do not apply to
         # the servers processed in the new log and adding a complete new log to it
-        desc = [i for i in desc if self.extractServerFromLogLine(i) not in procServers]
+        desc = [i for i in desc if len(i) < 2 or (i[1] not in procServers and i[1] != '')]
         desc += log
+        desc = ['|' + '|'.join(i) + '|' if len(i) == 4 else '' for i in desc]
         desc = list(set(desc)) # to avoid duplication of lines without the server
         desc.sort()
 
         # update the redmine issue
-        desc = '\n* '.join(desc)
-        if desc != '':
-            desc = '* ' + desc
+        desc = '|Severity|Server|Message|Container Description|\n' + '\n'.join(desc)
         data = {'issue': {
             'description': desc,
             'due_date': str(datetime.date.today())
@@ -102,8 +102,18 @@ class Redmine(IBackend):
         if resp.status_code != 200:
             raise Exception('Updating Redmine log issue failed')
 
-    def extractServerFromLogLine(self, line):
-        return re.sub('[\\]].*', '', re.sub('^[^\\[]*', '', line)[1:])
+    def parseLog(self, log):
+        log = log.strip()[1:].split('\n#')
+        severity = [(i[0:i.find(':')]).strip() for i in log] # from 1 to :
+        server = [(i[(i.find('[') + 1):i.find(']')]).strip() if i.find(']') > 0 else '' for i in log] # from [ to ]
+        message = [(i[(i.find(']') + 1):(i.find('{') if i.find('{') > 0 else None)]).strip() for i in log] # from ] to {
+        data = [(i[(i.find('{') - 1):]).strip() if i.find('{') > 0 else '' for i in log] # after {
+        return list(zip(severity, server, message, data))
+
+    def parseRedmineDescription(self, desc):
+        desc = ('\n' + desc.strip()).split('\n|')[2:]
+        desc = [[j.strip() for j in (i.strip()[0:-1]).split('|')] for i in desc]
+        return desc
 
     def createRecord(self, data) -> IRecord:
         reqData = {'issue': {
@@ -168,7 +178,6 @@ class Redmine(IBackend):
         if resp.status_code != 200:
             raise Exception('setting up Redmine notifications failed')
 
-
 class RedmineRecord(IRecord):
 
     expectedTrackerName = 'Service'
@@ -192,8 +201,7 @@ class RedmineRecord(IRecord):
         self.data = data
         
         if data is not None and 'tracker' in data and data['tracker']['name'] != RedmineRecord.expectedTrackerName:
-            logging.error('Redmine issue %d has a wrong tracker %s' % (self.id, data['tracker']['name']))
-
+            raise RecordError('Redmine issue %d has a wrong tracker %s' % (self.id, data['tracker']['name']))
 
     def update(self, newData):
         # same Redmine issue can't be updated with different services within the same day
@@ -213,15 +221,15 @@ class RedmineRecord(IRecord):
         reqData = {'custom_fields': []}
         newData['qos_update_date'] = str(datetime.date.today())
         
-        if 'InContainerApps' in newData and newData['InContainerApps'] is not None:
-            for inId, inCfg in newData['InContainerApps'].items():
+        if 'inContainerApps' in newData and newData['inContainerApps'] is not None:
+            for inId, inCfg in newData['inContainerApps'].items():
                 try:
                     app = self.redmine.findRecord({'id': inId})
                     relations.append({'id': inId, 'type': 'relates'})
                     app.update({'id': inId})
                 except RecordNotFound:
-                    logging.error('[%s] Redmine issue %d InContainerApps refers to a non-existing Redmine issue %s' % (newData['server'], self.id, str(inId)))
-            del newData['InContainerApps']
+                    logging.error('[%s] Redmine issue %d inContainerApps refers to a non-existing Redmine issue %s' % (newData['server'], self.id, str(inId)))
+            del newData['inContainerApps']
         
         for name, value in newData.items():
             if value is not None:
@@ -234,7 +242,7 @@ class RedmineRecord(IRecord):
         resp = self.redmine.session.put(self.url, json={'issue': reqData})
         if resp.status_code != 200:
             logging.debug(json.dumps({'issue': data}))
-            raise Exception('[%s] Redmine issue update failed with code %d and response %s' % (newData['server'], resp.status_code, resp.text))
+            raise RecordError('Redmine issue %d update failed with code %d and response "%s"' % (int(id), resp.status_code, resp.text))
         
         if 'envType' in newData:
             envType = newData['envType'].lower()
@@ -245,6 +253,8 @@ class RedmineRecord(IRecord):
 
         for i in relations:
             resp = self.redmine.session.post(self.url.replace('.json', '/relations.json'), json={'relation': {'issue_to_id': i['id'], 'relation_type': i['type']}})
+            if resp.status_code == 422 and 'Related issue has already been taken' != resp.json()['errors'][0]:
+                logging.error('[%s] Redmine issue %d->%d relation creation failed with message "%s"' % (newData['server'], int(self.id), int(i['id']), resp.json()['errors'][0]))
 
     def getCustomField(self, data, field):
         if field in RedmineRecord.mapping:
