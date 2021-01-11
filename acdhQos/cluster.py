@@ -14,12 +14,14 @@ class Rancher(ICluster):
     server = None
     apiBase = None
     project = None
+    skipProjects = None
     session = None
 
-    def __init__(self, server, apiBase, user, pswd, project=None):
+    def __init__(self, server, apiBase, user, pswd, project=None, skipProjects=None):
         self.server = server
         self.apiBase = apiBase
         self.project = project
+        self.skipProjects = [] if skipProjects is None else skipProjects
         
         if self.server is None:
             self.server = re.sub('^.*[/.]', '', re.sub('([.]arz|[.]acdh|[.]acdh-dev)?[.]oeaw[.].*$', '', self.server))
@@ -31,7 +33,7 @@ class Rancher(ICluster):
         data = []
         resp = self.session.get(self.apiBase + '/projects')
         for project in resp.json()['data']:
-            if self.project is not None and project['name'] != self.project:
+            if (self.project is not None and project['name'] != self.project) or project['name'] in self.skipProjects:
                 continue
             try:
                 logging.info('[%s] Processing project %s' % (self.server, project['name']))

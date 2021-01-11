@@ -19,6 +19,7 @@ parser.add_argument('--rancherUrl', default='https://rancher.acdh-dev.oeaw.ac.at
 parser.add_argument('--rancherUser', default='token-sbz8q')
 parser.add_argument('--rancherPswd')
 parser.add_argument('--rancherProject', help='limits Rancher processing to a single project of a given name')
+parser.add_argument('--rancherSkipProjects', nargs='*', help='excludes a given Rancher project(s) from processing')
 parser.add_argument('--rancherServer', default='acdh-cluster', help='server name to be used for the Rancher')
 parser.add_argument('--portainerUrl', default='https://portainer.sisyphos.arz.oeaw.ac.at/api')
 parser.add_argument('--portainerUser', default='admin')
@@ -62,7 +63,7 @@ try:
             logging.error('[%s] %s' % (args.dockerToolsServer, traceback.format_exc()))
     if args.rancher:
         try:
-            r = Rancher(args.rancherServer, args.rancherUrl, args.rancherUser, args.rancherPswd, args.rancherProject)
+            r = Rancher(args.rancherServer, args.rancherUrl, args.rancherUser, args.rancherPswd, args.rancherProject, args.rancherSkipProjects)
             data += r.harvest()
         except Exception:
             logging.error('[%s] %s' % (args.rancherServer, traceback.format_exc()))
