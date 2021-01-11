@@ -46,13 +46,13 @@ class Rancher(ICluster):
     def processWorkload(self, cfg, pcfg):
         name = cfg['name']
 
-        redmineId = None #TODO
+        redmineId = self.getLabel(cfg, 'ID')
 
         images = [i['image'] for i in cfg['containers']]
         images = '\n'.join(set(images))
 
         endpoint = []
-        for i in cfg['publicEndpoints'] if 'publicEndpoints' in cfg else []:
+        for i in cfg['publicEndpoints'] if 'publicEndpoints' in cfg and cfg['publicEndpoints'] is not None else []:
             endpoint.append(i['protocol'].lower() + '://' + (i['hostname'] if 'hostname' in i else ', '.join(i['addresses'])))
         endpoint = '\n'.join(set(endpoint))
 
@@ -70,6 +70,11 @@ class Rancher(ICluster):
         users = '\n'.join(set(users))
 
         return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': self.server, 'project': pcfg['name']}
+
+    def getLabel(self, cfg, name):
+        if 'labels' not in cfg or name not in cfg['labels']:
+            return None
+        return cfg['labels'][name]
 
 class Portainer(ICluster):
 
