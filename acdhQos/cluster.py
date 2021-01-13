@@ -132,7 +132,7 @@ class Portainer(ICluster):
                     logging.info('[%s] Processing container %s' % (self.server, stack['Name'] + '-' + name))
                     data.append(self.processContainer(name, ccfg, stack))
             except Exception:
-                logging.error('[%s] %s' % (self.server, traceback.format_exc()))
+                logging.error('[%s] %s in stack %s' % (self.server, traceback.format_exc(), str(stack['Id'])))
         return data
 
     def processContainer(self, name, ccfg, scfg):
