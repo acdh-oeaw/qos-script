@@ -33,6 +33,7 @@ parser.add_argument('--rancher', action='store_true', help='process Rancher')
 parser.add_argument('--portainer', action='store_true', help='process Portainer')
 parser.add_argument('--dockerTools', action='store_true', help='process docker-tools')
 parser.add_argument('--verbose', action='store_true')
+parser.add_argument('--readOnly', action='store_true', help='Only read data and do not update the backend')
 args = parser.parse_args()
 
 logger = logging.getLogger()
@@ -48,9 +49,10 @@ lh2.setLevel(logging.WARNING)
 lh2.setFormatter(logging.Formatter('#%(levelname)s: %(message)s'))
 logger.addHandler(lh2)
 
-backend = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd), logIssueId=args.redmineLogIssueId)
-backend.begin()
-logging.info('Backend initialization successful')
+if not args.readOnly:
+    backend = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd), logIssueId=args.redmineLogIssueId)
+    backend.begin()
+    logging.info('Backend initialization successful')
 
 try:
     data = []
@@ -74,27 +76,33 @@ try:
         except Exception:
             logging.error('[%s] %s' % (args.portainerServer, traceback.format_exc()))
 
-    logging.info('Updating backend with the gathered data')
-    for i in data:
-        try:
-            record = backend.findRecord(i)
-            record.update(i)
-            # It doesn't make sense to create backend records for non-existing Portainer and Rancher containers
-            #   as it would require adjusting Portainer and Rancher config (stroring record id in the service metadata). 
-            #   Technically it can be done but as Portainer and Rancher are not reference sources of their services' 
-            #   configuration, such a change will be overwritten sooner or later leading to duplication of backend records.
-            # Instead errors log is being passed to backend's `end()` method which allows to review spotted problems
-            #   and fix them at their source.
-        except RecordNotFound:
-            logging.error('[%s] Backend record not found for: %s' % (i['server'], json.dumps(i)))
-        except RecordDuplicated as e:
-            logging.error('[%s] Backend record %s duplicated with: %s' % (i['server'], str(e.id), json.dumps(e.data)))
-        except RecordError as e:
-            logging.error('[%s] %s' % (i['server'], str(e)))
+    if not args.readOnly:
+        logging.info('Updating backend with the gathered data')
+        for i in data:
+            try:
+                record = backend.findRecord(i)
+                record.update(i)
+                # It doesn't make sense to create backend records for non-existing Portainer and Rancher containers
+                #   as it would require adjusting Portainer and Rancher config (stroring record id in the service metadata). 
+                #   Technically it can be done but as Portainer and Rancher are not reference sources of their services' 
+                #   configuration, such a change will be overwritten sooner or later leading to duplication of backend records.
+                # Instead errors log is being passed to backend's `end()` method which allows to review spotted problems
+                #   and fix them at their source.
+            except RecordNotFound:
+                logging.error('[%s] Backend record not found for: %s' % (i['server'], json.dumps(i)))
+            except RecordDuplicated as e:
+                logging.error('[%s] Backend record %s duplication between: %s and %s' % (i['server'], str(e.id), json.dumps(e.newData), json.dumps(e.oldData)))
+            except RecordError as e:
+                logging.error('[%s] %s' % (i['server'], str(e)))
+    else:
+        logging.info('Listing harvested data')
+        for i in data:
+           logging.info(json.dumps(i))
 except Exception:
     logging.error(traceback.format_exc())
 finally:
-    with open(logPath) as fd:
-        backend.end(fd.read())
+    if not args.readOnly:
+        with open(logPath) as fd:
+            backend.end(fd.read())
     os.unlink(logPath)
 

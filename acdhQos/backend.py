@@ -20,11 +20,13 @@ class RecordCreationFailed(Exception):
 
 class RecordDuplicated(Exception):
     id = None
-    data = None
+    newData = None
+    oldData = None
 
-    def __init__(self, id, data):
+    def __init__(self, id, newData, oldData):
         self.id = id
-        self.data = data
+        self.newData = newData
+        self.oldData = oldData
 
 class RecordError(Exception):
     pass
@@ -216,7 +218,7 @@ class RedmineRecord(IRecord):
             curServer = self.getCustomField(self.data, 'server') or ''
             curName = self.getCustomField(self.data, 'name') or ''
             if curServer + '@' + curName != newData['server'] + '@' + newData['name']:
-                raise RecordDuplicated(self.id, newData)
+                raise RecordDuplicated(self.id, newData, {'name': curName, 'server': curServer})
         
         # prepare request data
         relations = []
