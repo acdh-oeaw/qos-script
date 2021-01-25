@@ -60,9 +60,9 @@ class Rancher(ICluster):
 
         techStack = '\n'.join([i['image'] for i in cfg['containers']])
 
-        inContainerApps = None #TODO
+        inContainerApps = self.getAnnotation(cfg, 'InContainerApps')
 
-        backendConnection = None #TODO
+        backendConnection = self.getAnnotation(cfg, 'BackendConnection')
 
         users = []
         resp = self.session.get(self.apiBase + '/project/' + pcfg['id'] + '/projectRoleTemplateBindings')
@@ -77,6 +77,11 @@ class Rancher(ICluster):
         if 'labels' not in cfg or name not in cfg['labels']:
             return None
         return cfg['labels'][name]
+
+    def getAnnotation(self, cfg, name):
+        if 'annotations' not in cfg or name not in cfg['annotations']:
+            return None
+        return cfg['annotations'][name]
 
 class Portainer(ICluster):
 
