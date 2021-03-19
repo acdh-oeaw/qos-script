@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import re
 import requests
@@ -103,7 +104,7 @@ class Redmine(IBackend):
             'due_date': str(datetime.date.today())
         }}
         resp = self.session.put(url, json=data)
-        if resp.status_code != 200:
+        if resp.status_code != 200 and resp.status_code != 204:
             raise Exception('Updating Redmine log issue failed')
 
     def parseLog(self, log):
@@ -226,14 +227,17 @@ class RedmineRecord(IRecord):
         newData['qos_update_date'] = str(datetime.date.today())
         
         if 'inContainerApps' in newData and newData['inContainerApps'] is not None:
-            for inId, inCfg in newData['inContainerApps'].items():
-                try:
-                    app = self.redmine.findRecord({'id': inId})
-                    relations.append({'id': inId, 'type': 'relates'})
-                    app.update({'id': inId, 'Service categories': [self.redmine.inContainerAppCategory]})
-                except RecordNotFound:
-                    logging.error('[%s] Redmine issue %d inContainerApps refers to a non-existing Redmine issue %s' % (newData['server'], self.id, str(inId)))
-            del newData['inContainerApps']
+            try: 
+                for inId, inCfg in newData['inContainerApps'].items():
+                    try:
+                        app = self.redmine.findRecord({'id': inId})
+                        relations.append({'id': inId, 'type': 'relates'})
+                        app.update({'id': inId, 'Service categories': [self.redmine.inContainerAppCategory]})
+                    except RecordNotFound:
+                        logging.error('[%s] Redmine issue %d inContainerApps refers to a non-existing Redmine issue %s' % (newData['server'], self.id, str(inId)))
+                del newData['inContainerApps']
+            except AttributeError:
+                logging.error('[%s] Incorrect inContainerApps in %s' % (newData['server'], json.dumps(newData)))
         
         for name, value in newData.items():
             if value is not None:
@@ -244,9 +248,9 @@ class RedmineRecord(IRecord):
                     reqData[key] = value
  
         resp = self.redmine.session.put(self.url, json={'issue': reqData})
-        if resp.status_code != 200:
-            logging.debug(json.dumps({'issue': data}))
-            raise RecordError('Redmine issue %d update failed with code %d and response "%s"' % (int(id), resp.status_code, resp.text))
+        if resp.status_code != 200 and resp.status_code != 204:
+            logging.debug(json.dumps({'issue': reqData}))
+            raise RecordError('Redmine issue %d update failed with code %d and response "%s"' % (int(self.id), resp.status_code, resp.text))
         
         if 'envType' in newData:
             envType = newData['envType'].lower()
