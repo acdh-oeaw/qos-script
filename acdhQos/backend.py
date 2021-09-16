@@ -72,13 +72,13 @@ class Redmine(IBackend):
     def begin(self):
         self.setupNotifications(False)
         
-    def end(self, log):
+    def end(self, log, procServers):
         self.setupNotifications(True)
         if self.logIssueId is not None:
-            self.saveLog(log)
+            self.saveLog(log, procServers)
 
-    def saveLog(self, log):
-        # get the current log and slipt it into entries - we must combine it with the new one
+    def saveLog(self, log, procServers):
+        # get the current log and split it into entries - we must combine it with the new one
         url = '%s/issues/%s.json' % (self.baseUrl, str(self.logIssueId))
         resp = self.session.get(url)
         if resp.status_code != 200:
@@ -86,8 +86,6 @@ class Redmine(IBackend):
         desc = self.parseRedmineDescription(resp.json()['issue']['description'])
         log = self.parseLog(log)
         # now every desc and log element is an array of [severity, server, message, data]
-
-        procServers = set([i[1] for i in log if i[1] != ''])
 
         # combine logs by keeping all lines from the old ones which do not apply to
         # the servers processed in the new log and adding a complete new log to it

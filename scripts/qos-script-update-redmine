@@ -54,25 +54,28 @@ if not args.readOnly:
     backend.begin()
     logging.info('Backend initialization successful')
 
+procServers = [] 
 try:
     data = []
-    
     if args.dockerTools:
         try:
             d = DockerTools(args.dockerToolsServer, args.dockerToolsAccount)
             data += d.harvest()
+            procServers.append(args.dockerToolsServer)
         except Exception:
             logging.error('[%s] %s' % (args.dockerToolsServer, traceback.format_exc()))
     if args.rancher:
         try:
             r = Rancher(args.rancherServer, args.rancherUrl, args.rancherUser, args.rancherPswd, args.rancherProject, args.rancherSkipProjects)
             data += r.harvest()
+            procServers.append(args.rancherServer)
         except Exception:
             logging.error('[%s] %s' % (args.rancherServer, traceback.format_exc()))
     if args.portainer:
         try:
             p = Portainer(args.portainerServer, args.portainerUrl, args.portainerUser, args.portainerPswd, args.portainerProjectPath, args.portainerStack)
             data += p.harvest()
+            procServers.append(args.portainerServer)
         except Exception:
             logging.error('[%s] %s' % (args.portainerServer, traceback.format_exc()))
 
@@ -103,6 +106,6 @@ except Exception:
 finally:
     if not args.readOnly:
         with open(logPath) as fd:
-            backend.end(fd.read())
+            backend.end(fd.read(), procServers)
     os.unlink(logPath)
 
