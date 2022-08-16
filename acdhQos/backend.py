@@ -151,8 +151,10 @@ class Redmine(IBackend):
 
     def setupNotifications(self, on):
         resp = self.session.get(self.baseUrl + '/login')
-        authToken = re.sub('.*input type="hidden" name="authenticity_token" value="([^"]*)".*', '\\1', resp.text.replace('\n', ''))
-        resp = self.session.post(self.baseUrl + '/login', cookies=resp.cookies, data={'authenticity_token': authToken, 'username': self.session.auth[0], 'password': self.session.auth[1]})
+        loginForm = resp.text.replace('\n', '')
+        authToken = re.sub('.*input type="hidden" name="authenticity_token" value="([^"]*)".*', '\\1', loginForm)
+        if authToken != loginForm:
+            resp = self.session.post(self.baseUrl + '/login', cookies=resp.cookies, data={'authenticity_token': authToken, 'username': self.session.auth[0], 'password': self.session.auth[1]})
 
         resp = self.session.get(self.baseUrl + '/settings?tab=notifications', cookies=resp.cookies)
         form = re.sub('</form>.*', '', re.sub('^.*<form action="/settings/edit[?]tab=notifications"[^>]*>', '', resp.text.replace('\n', '')))
@@ -179,7 +181,7 @@ class Redmine(IBackend):
             data += urllib.parse.quote(formFields[i], safe='') + '=' + urllib.parse.quote(formValues[i], safe='') + '&'
         resp = self.session.post('https://redmine.acdh.oeaw.ac.at/settings/edit?tab=notifications', cookies=resp.cookies, data=data)
         if resp.status_code != 200:
-            raise Exception('setting up Redmine notifications failed')
+            raise Exception(f'setting up Redmine notifications failed with {resp.status_code}')
 
 class RedmineRecord(IRecord):
 

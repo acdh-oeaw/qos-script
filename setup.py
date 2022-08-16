@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="acdhDashboard",
-    version="0.7.5",
+    version="0.7.6",
     packages=find_packages(),
     scripts=['scripts/qos-script-update-redmine'],
     install_requires=[],
