@@ -102,28 +102,28 @@ class Portainer(ICluster):
         if self.server is None:
             self.server = re.sub('^.*[/.]', '', re.sub('([.]arz|[.]acdh|[.]acdh-dev)?[.]oeaw[.].*$', '', self.server))
 
-        resp = requests.post(apiBase + '/auth', data=json.dumps({'Username': user, 'Password': pswd}))
+        resp = requests.post(apiBase + '/auth', data=json.dumps({'Username': user, 'Password': pswd}), verify=False)
         self.session = requests.Session()
         self.session.headers.update({'Authorization': 'Bearer ' + resp.json()['jwt']})
 
-        resp = self.session.get(apiBase + '/roles')
+        resp = self.session.get(apiBase + '/roles', verify=False)
         roles = {}
         for role in resp.json():
             roles[str(role['Id'])] = role['Name']
 
-        resp = self.session.get(apiBase + '/users')
+        resp = self.session.get(apiBase + '/users', verify=False)
         self.users = [{'Id': i['Id'], 'Name': i['Username'], 'Role': roles[str(i['Role'])]} for i in resp.json()]
         self.users = dict(zip([str(i['Id']) for i in self.users], self.users))
 
         self.teams = {}
-        resp = self.session.get(apiBase + '/teams')
+        resp = self.session.get(apiBase + '/teams', verify=False)
         for team in resp.json():
-            resp = self.session.get(apiBase + '/teams/' + str(team['Id']) + '/memberships')
+            resp = self.session.get(apiBase + '/teams/' + str(team['Id']) + '/memberships', verify=False)
             self.teams[str(team['Id'])] = [self.users[str(i['UserID'])] for i in resp.json()]
 
     def harvest(self):
         data = []
-        resp = self.session.get(self.apiBase + '/stacks')
+        resp = self.session.get(self.apiBase + '/stacks', verify=False)
         for stack in resp.json():
             if self.stack is not None and stack['Name'] != self.stack:
                 continue
@@ -131,7 +131,7 @@ class Portainer(ICluster):
                 logging.info('[%s] Processing stack %s' % (self.server, str(stack['Id'])))
                 users = self.getUsers(stack)
 
-                resp = self.session.get(self.apiBase + '/stacks/' + str(stack['Id']) + '/file')
+                resp = self.session.get(self.apiBase + '/stacks/' + str(stack['Id']) + '/file', verify=False)
                 cfg = yaml.safe_load(resp.json()['StackFileContent'])
                 for name, ccfg in cfg['services'].items():
                     logging.info('[%s] Processing container %s' % (self.server, stack['Name'] + '-' + name))
