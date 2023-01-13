@@ -20,7 +20,7 @@ parser.add_argument('--rancherUser', default='token-sbz8q')
 parser.add_argument('--rancherPswd')
 parser.add_argument('--rancherProject', help='limits Rancher processing to a single project of a given name')
 parser.add_argument('--rancherSkipProjects', nargs='*', help='excludes a given Rancher project(s) from processing')
-parser.add_argument('--rancherServer', default='acdh-cluster', help='server name to be used for the Rancher')
+parser.add_argument('--rancherSkipClusters', nargs='*', help='excludes a given Rancher cluster(s) from processing')
 parser.add_argument('--portainerUrl', default='https://portainer.sisyphos.arz.oeaw.ac.at/api')
 parser.add_argument('--portainerUser', default='admin')
 parser.add_argument('--portainerPswd')
@@ -66,11 +66,11 @@ try:
             logging.error('[%s] %s' % (args.dockerToolsServer, traceback.format_exc()))
     if args.rancher:
         try:
-            r = Rancher(args.rancherServer, args.rancherUrl, args.rancherUser, args.rancherPswd, args.rancherProject, args.rancherSkipProjects)
+            r = Rancher(args.rancherUrl, args.rancherUser, args.rancherPswd, args.rancherProject, args.rancherSkipProjects, args.rancherSkipClusters)
             data += r.harvest()
-            procServers.append(args.rancherServer)
+            procServers += r.getClusters()
         except Exception:
-            logging.error('[%s] %s' % (args.rancherServer, traceback.format_exc()))
+            logging.error('[%s] %s' % (args.rancherUrl, traceback.format_exc()))
     if args.portainer:
         try:
             p = Portainer(args.portainerServer, args.portainerUrl, args.portainerUser, args.portainerPswd, args.portainerProjectPath, args.portainerStack)

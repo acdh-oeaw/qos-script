@@ -11,42 +11,50 @@ from acdhQos.interface import *
 
 class Rancher(ICluster):
 
-    server = None
     apiBase = None
     project = None
     skipProjects = None
+    skipClusters = None
     session = None
+    clusters = None
 
-    def __init__(self, server, apiBase, user, pswd, project=None, skipProjects=None):
-        self.server = server
+    def __init__(self, apiBase, user, pswd, project=None, skipProjects=None, skipClusters=None):
         self.apiBase = apiBase
         self.project = project
         self.skipProjects = [] if skipProjects is None else skipProjects
-        
-        if self.server is None:
-            self.server = re.sub('^.*[/.]', '', re.sub('([.]arz|[.]acdh|[.]acdh-dev)?[.]oeaw[.].*$', '', self.server))
+        self.skipClusters = [] if skipClusters is None else skipClusters
         
         self.session = requests.Session()
         self.session.auth = (user, pswd)
+
+        resp = self.session.get(self.apiBase + '/clusters')
+        self.clusters = {x['id']:x['name'] for x in resp.json()['data']}
         
+    def getClusters(self):
+        return self.clusters.values()
+
     def harvest(self):
         data = []
         resp = self.session.get(self.apiBase + '/projects')
         for project in resp.json()['data']:
             if (self.project is not None and project['name'] != self.project) or project['name'] in self.skipProjects:
                 continue
+            server = self.clusters[project['clusterId']]
+            if server in self.skipClusters or project['clusterId'] in self.skipClusters:
+                continue
             try:
-                logging.info('[%s] Processing project %s' % (self.server, project['name']))
+                logging.info('[%s] Processing project %s' % (server, project['name']))
                 resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
                 for workload in resp.json()['data']:
-                    logging.info('[%s] Processing workload %s' % (self.server, workload['name']))
+                    logging.info('[%s] Processing workload %s' % (server, workload['name']))
                     data.append(self.processWorkload(workload, project))
             except Exception:
-                logging.error('[%s] %s' % (self.server, traceback.format_exc()))
+                logging.error('[%s] %s' % (server, traceback.format_exc()))
         return data
 
     def processWorkload(self, cfg, pcfg):
         name = cfg['name']
+        server = self.clusters[pcfg['clusterId']]
 
         redmineId = self.getLabel(cfg, 'ID')
 
@@ -55,6 +63,8 @@ class Rancher(ICluster):
 
         endpoint = []
         for i in cfg['publicEndpoints'] if 'publicEndpoints' in cfg and cfg['publicEndpoints'] is not None else []:
+            if 'addresses' not in i and 'hostname' not in i:
+                continue
             endpoint.append(i['protocol'].lower() + '://' + (i['hostname'] if 'hostname' in i else ', '.join(i['addresses'])))
         endpoint = '\n'.join(set(endpoint))
 
@@ -67,11 +77,12 @@ class Rancher(ICluster):
         users = []
         resp = self.session.get(self.apiBase + '/project/' + pcfg['id'] + '/projectRoleTemplateBindings')
         for user in resp.json()['data']:
-            username = re.sub('.*CN=([^,]*),OU=.*', '\\1', user['userPrincipalId'].replace('\\,', ''))
-            users.append(username + ' (' + user['userId'] + '): ' + user['roleTemplateId'])
+            if user.get('userPrincipalId') is not None:
+                username = re.sub('.*CN=([^,]*),OU=.*', '\\1', user['userPrincipalId'].replace('\\,', ''))
+                users.append(username + ' (' + user['userId'] + '): ' + user['roleTemplateId'])
         users = '\n'.join(set(users))
 
-        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': self.server, 'project': pcfg['name']}
+        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': server, 'project': pcfg['name']}
 
     def getLabel(self, cfg, name):
         if 'labels' not in cfg or name not in cfg['labels']:
