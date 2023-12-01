@@ -75,12 +75,18 @@ class Rancher(ICluster):
 
     def getLabel(self, cfg, name):
         if 'labels' not in cfg or name not in cfg['labels']:
-            return None
+            if 'workloadLabels' not in cfg or name not in cfg['workloadLabels']:
+                return None
+            else:
+                return cfg['workloadLabels'][name]
         return cfg['labels'][name]
 
     def getAnnotation(self, cfg, name):
         if 'annotations' not in cfg or name not in cfg['annotations']:
-            return None
+            if 'workloadAnnotations' not in cfg or name not in cfg['workloadAnnotations']:
+                return None
+            else:
+                return cfg['workloadAnnotations'][name]
         return cfg['annotations'][name]
 
 class Portainer(ICluster):
