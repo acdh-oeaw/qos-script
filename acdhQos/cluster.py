@@ -15,17 +15,19 @@ class Rancher(ICluster):
     project = None
     skipProjects = None
     skipClusters = None
+    skipTypes = None
     session = None
     clusters = None
 
-    def __init__(self, apiBase, user, pswd, project=None, skipProjects=None, skipClusters=None):
+    def __init__(self, apiBase, token, project=None, skipProjects=None, skipClusters=None, skipTypes=None):
         self.apiBase = apiBase
         self.project = project
-        self.skipProjects = [] if skipProjects is None else skipProjects
-        self.skipClusters = [] if skipClusters is None else skipClusters
+        self.skipProjects = skipProjects or []
+        self.skipClusters = skipClusters or []
+        self.skipTypes = skipTypes or []
         
         self.session = requests.Session()
-        self.session.auth = (user, pswd)
+        self.session.headers = {'Authorization': 'Bearer ' + token}
 
         resp = self.session.get(self.apiBase + '/clusters')
         self.clusters = {x['id']:x['name'] for x in resp.json()['data']}
@@ -46,6 +48,8 @@ class Rancher(ICluster):
                 logging.info('[%s] Processing project %s' % (server, project['name']))
                 resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
                 for workload in resp.json()['data']:
+                    if workload['type'] in self.skipTypes:
+                        continue
                     logging.info('[%s] Processing workload %s' % (server, workload['name']))
                     data.append(self.processWorkload(workload, project))
             except Exception:
@@ -54,6 +58,7 @@ class Rancher(ICluster):
 
     def processWorkload(self, cfg, pcfg):
         name = cfg['name']
+        type = cfg['type']
         server = self.clusters[pcfg['clusterId']]
 
         redmineId = self.getLabel(cfg, 'ID')
@@ -82,7 +87,7 @@ class Rancher(ICluster):
                 users.append(username + ' (' + user['userId'] + '): ' + user['roleTemplateId'])
         users = '\n'.join(set(users))
 
-        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': server, 'project': pcfg['name']}
+        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': server, 'project': pcfg['name'], 'type': type}
 
     def getLabel(self, cfg, name):
         if 'labels' not in cfg or name not in cfg['labels']:

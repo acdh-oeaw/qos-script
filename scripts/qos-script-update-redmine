@@ -16,11 +16,11 @@ parser.add_argument('--redmineUser', default='qosScript')
 parser.add_argument('--redminePswd')
 parser.add_argument('--redmineLogIssueId', default=18419)
 parser.add_argument('--rancherUrl', default='https://rancher.acdh-dev.oeaw.ac.at/v3')
-parser.add_argument('--rancherUser', default='token-sbz8q')
-parser.add_argument('--rancherPswd')
+parser.add_argument('--rancherToken')
 parser.add_argument('--rancherProject', help='limits Rancher processing to a single project of a given name')
 parser.add_argument('--rancherSkipProjects', nargs='*', help='excludes a given Rancher project(s) from processing')
 parser.add_argument('--rancherSkipClusters', nargs='*', help='excludes a given Rancher cluster(s) from processing')
+parser.add_argument('--rancherSkipTypes', nargs='*', choices=['deployment', 'cronJob', 'daemonSet', 'job', 'statefulSet'], default=['cronJob', 'job'], help='excludes a given type of Rancher workloads')
 parser.add_argument('--portainerUrl', default='https://portainer.sisyphos.arz.oeaw.ac.at/api')
 parser.add_argument('--portainerUser', default='admin')
 parser.add_argument('--portainerPswd')
@@ -66,7 +66,7 @@ try:
             logging.error('[%s] %s' % (args.dockerToolsServer, traceback.format_exc()))
     if args.rancher:
         try:
-            r = Rancher(args.rancherUrl, args.rancherUser, args.rancherPswd, args.rancherProject, args.rancherSkipProjects, args.rancherSkipClusters)
+            r = Rancher(args.rancherUrl, args.rancherToken, args.rancherProject, args.rancherSkipProjects, args.rancherSkipClusters, args.rancherSkipTypes)
             data += r.harvest()
             procServers += r.getClusters()
         except Exception:
