@@ -1,6 +1,7 @@
 image:
   repository: ghcr.io/acdh-oeaw/qos-script/qos-script
   tag: latest
+  pullPolicy: Always
 
 ingress:
   enabled: false
