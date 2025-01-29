@@ -1,11 +1,6 @@
-serviceAccountName: qos-script
-
 image:
   repository: ghcr.io/acdh-oeaw/qos-script/qos-script
   tag: latest
-
-service:
-  name: qos-script
 
 ingress:
   enabled: false
