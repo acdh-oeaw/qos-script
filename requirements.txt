@@ -1,7 +1,6 @@
 requests
 urllib3
 argparse
-logging
 sys
 tempfile
 traceback
@@ -11,3 +10,4 @@ abc
 docker
 pyyaml
 setuptools
+
