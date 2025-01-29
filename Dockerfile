@@ -10,5 +10,7 @@ COPY . /app
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
+ENV PYTHONPATH=/app
+
 # Run script when the container launches
 CMD ["bash", "-c", "while : ; do sleep 600 ;done"]
