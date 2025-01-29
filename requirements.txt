@@ -1,0 +1,13 @@
+requests
+urllib3
+argparse
+logging
+sys
+tempfile
+traceback
+os
+shutil
+abc
+docker
+pyyaml
+setuptools

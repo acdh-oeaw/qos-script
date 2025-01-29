@@ -13,25 +13,15 @@ from acdhQos.cluster import *
 parser = argparse.ArgumentParser()
 parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at/')
 parser.add_argument('--redmineUser', default='qosScript')
-parser.add_argument('--redminePswd')
+parser.add_argument('--redminePswd'), default=os.getenv('REDMINE_PSWD'))
 parser.add_argument('--redmineLogIssueId', default=18419)
 parser.add_argument('--rancherUrl', default='https://rancher.acdh-dev.oeaw.ac.at/v3')
-parser.add_argument('--rancherToken')
+parser.add_argument('--rancherToken'), default=os.getenv('RANCHER_TOKEN'))
 parser.add_argument('--rancherProject', help='limits Rancher processing to a single project of a given name')
 parser.add_argument('--rancherSkipProjects', nargs='*', help='excludes a given Rancher project(s) from processing')
 parser.add_argument('--rancherSkipClusters', nargs='*', help='excludes a given Rancher cluster(s) from processing')
 parser.add_argument('--rancherSkipTypes', nargs='*', choices=['deployment', 'cronJob', 'daemonSet', 'job', 'statefulSet'], default=['cronJob', 'job'], help='excludes a given type of Rancher workloads')
-parser.add_argument('--portainerUrl', default='https://portainer.sisyphos.arz.oeaw.ac.at/api')
-parser.add_argument('--portainerUser', default='admin')
-parser.add_argument('--portainerPswd')
-parser.add_argument('--portainerProjectPath', default='/home/portainer/shares')
-parser.add_argument('--portainerStack', help='limits Portainer processing to a single stack of a given name')
-parser.add_argument('--portainerServer', help='server name to be used for the Portainer (by default derived from the portainerUrl)')
-parser.add_argument('--dockerToolsAccount', help='limits docker-tools processing to a single user account of a given name')
-parser.add_argument('--dockerToolsServer', help='server name to be used for the docker-tools')
 parser.add_argument('--rancher', action='store_true', help='process Rancher')
-parser.add_argument('--portainer', action='store_true', help='process Portainer')
-parser.add_argument('--dockerTools', action='store_true', help='process docker-tools')
 parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--readOnly', action='store_true', help='Only read data and do not update the backend')
 args = parser.parse_args()
@@ -57,13 +47,6 @@ if not args.readOnly:
 procServers = [] 
 try:
     data = []
-    if args.dockerTools:
-        try:
-            d = DockerTools(args.dockerToolsServer, args.dockerToolsAccount)
-            data += d.harvest()
-            procServers.append(args.dockerToolsServer)
-        except Exception:
-            logging.error('[%s] %s' % (args.dockerToolsServer, traceback.format_exc()))
     if args.rancher:
         try:
             r = Rancher(args.rancherUrl, args.rancherToken, args.rancherProject, args.rancherSkipProjects, args.rancherSkipClusters, args.rancherSkipTypes)
@@ -71,14 +54,6 @@ try:
             procServers += r.getClusters()
         except Exception:
             logging.error('[%s] %s' % (args.rancherUrl, traceback.format_exc()))
-    if args.portainer:
-        try:
-            p = Portainer(args.portainerServer, args.portainerUrl, args.portainerUser, args.portainerPswd, args.portainerProjectPath, args.portainerStack)
-            data += p.harvest()
-            procServers.append(args.portainerServer)
-        except Exception:
-            logging.error('[%s] %s' % (args.portainerServer, traceback.format_exc()))
-
     if not args.readOnly:
         logging.info('Updating backend with the gathered data')
         for i in data:
