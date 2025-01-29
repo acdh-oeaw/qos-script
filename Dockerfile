@@ -11,4 +11,4 @@ COPY . /app
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Run script when the container launches
-CMD ["/bin/bash"]
+CMD ["bash", "-c", "while : ; do sleep 600 ;done"]
