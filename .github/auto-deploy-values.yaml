@@ -1,16 +1,16 @@
-image:
-  repository: ghcr.io/acdh-oeaw/qos-script/qos-script
-  tag: latest
-  pullPolicy: Always
-
-ingress:
-  enabled: false
-
-livenessProbe:
-  enabled: false
-
-readinessProbe:
-  enabled: false
-
-startupProbe:
-  enabled: false
+cronjobs:
+  job:
+    schedule: "0 8 * * 5" # Adjust the schedule as needed
+    image:
+      repository: ghcr.io/acdh-oeaw/qos-script/qos-script
+      tag: latest
+    command: [ "/bin/bash" ]
+    args: [ "-c", "python /app/scripts/qos-script-update-redmine --redminePswd $REDMINE_PSWD" ]
+    concurrencyPolicy: Forbid
+    failedJobsHistoryLimit: 1
+    restartPolicy: OnFailure
+    startingDeadlineSeconds: 300
+    successfulJobsHistoryLimit: 1
+    extraEnvFrom:
+    - secretRef:
+        name: qos-script-master
