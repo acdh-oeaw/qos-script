@@ -21,7 +21,7 @@ cronjobs:
       repository: ghcr.io/acdh-oeaw/qos-script/qos-script
       tag: latest
     command: [ "/bin/bash" ]
-    args: [ "-c", "python /app/scripts/qos-script-update-redmine --redminePswd $REDMINE_PSWD" ]
+    args: [ "-c", "python /app/scripts/qos-script-update-redmine --redminePswd $REDMINE_PSWD --verbose" ]
     concurrencyPolicy: Forbid
     failedJobsHistoryLimit: 1
     restartPolicy: OnFailure
