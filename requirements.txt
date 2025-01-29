@@ -1,13 +1,5 @@
 requests
 urllib3
-argparse
-sys
-tempfile
-traceback
-os
-shutil
-abc
 docker
 pyyaml
 setuptools
-
