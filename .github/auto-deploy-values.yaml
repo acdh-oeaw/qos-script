@@ -27,6 +27,7 @@ cronjobs:
     restartPolicy: OnFailure
     startingDeadlineSeconds: 300
     successfulJobsHistoryLimit: 1
+    activeDeadlineSeconds: 3600
     extraEnvFrom:
     - secretRef:
         name: qos-script-master
