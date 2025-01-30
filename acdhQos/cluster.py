@@ -42,38 +42,46 @@ class Rancher(ICluster):
 
 def harvest(self):
     data = []
-    resp = self.session.get(self.apiBase + '/projects')
-    for project in resp.json()['data']:
-        if (self.project is not None and project['name'] != self.project) or project['name'] in self.skipProjects:
-            continue
-        server = self.clusters[project['clusterId']]
-        if server in self.skipClusters or project['clusterId'] in self.skipClusters:
-            continue
-        try:
-            logging.info('[%s] Processing project %s' % (server, project['name']))
-            resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
-            workloads = resp.json()['data']
+    try:
+        resp = self.session.get(self.apiBase + '/projects')
+        projects = resp.json().get('data', [])
+        logging.info(f"Found {len(projects)} projects")
 
-            # Fetch ingresses for the project
-            ingresses_resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/ingresses')
-            ingresses = ingresses_resp.json()['data']
+        for project in projects:
+            if (self.project is not None and project['name'] != self.project) or project['name'] in self.skipProjects:
+                continue
+            server = self.clusters[project['clusterId']]
+            if server in self.skipClusters or project['clusterId'] in self.skipClusters:
+                continue
+            try:
+                logging.info('[%s] Processing project %s' % (server, project['name']))
+                resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
+                workloads = resp.json().get('data', [])
+                logging.info(f"Found {len(workloads)} workloads in project {project['name']}")
 
-            for workload in workloads:
-                if workload['type'] in self.skipTypes:
-                    continue
+                # Fetch ingresses for the project
+                ingresses_resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/ingresses')
+                ingresses = ingresses_resp.json().get('data', [])
+                logging.info(f"Found {len(ingresses)} ingresses in project {project['name']}")
 
-                # Check if the workload has an associated ingress
-                has_ingress = any(
-                    workload['name'] in ingress['name'] for ingress in ingresses
-                )
+                for workload in workloads:
+                    if workload['type'] in self.skipTypes:
+                        continue
 
-                if has_ingress:
-                    logging.info('[%s] Processing workload %s' % (server, workload['name']))
-                    data.append(self.processWorkload(workload, project))
-                else:
-                    logging.info('[%s] Skipping workload %s (no ingress)' % (server, workload['name']))
-        except Exception:
-            logging.error('[%s] %s' % (server, traceback.format_exc()))
+                    # Check if the workload has an associated ingress
+                    has_ingress = any(
+                        workload['name'] in ingress['name'] for ingress in ingresses
+                    )
+
+                    if has_ingress:
+                        logging.info('[%s] Processing workload %s' % (server, workload['name']))
+                        data.append(self.processWorkload(workload, project))
+                    else:
+                        logging.info('[%s] Skipping workload %s (no ingress)' % (server, workload['name']))
+            except Exception as e:
+                logging.error('[%s] %s' % (server, traceback.format_exc()))
+    except Exception as e:
+        logging.error('Failed to fetch projects: %s' % traceback.format_exc())
     return data
 
     def processWorkload(self, cfg, pcfg):
