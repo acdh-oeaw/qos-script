@@ -82,7 +82,7 @@ def harvest(self):
                 logging.error('[%s] %s' % (server, traceback.format_exc()))
     except Exception as e:
         logging.error('Failed to fetch projects: %s' % traceback.format_exc())
-    return data
+    return data if data else []
 
     def processWorkload(self, cfg, pcfg):
         name = cfg['name']
