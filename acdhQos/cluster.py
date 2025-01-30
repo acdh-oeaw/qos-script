@@ -30,8 +30,13 @@ class Rancher(ICluster):
         self.session.headers = {'Authorization': 'Bearer ' + token}
 
         resp = self.session.get(self.apiBase + '/clusters')
-        self.clusters = {x['id']:x['name'] for x in resp.json()['data']}
-        
+        resp.raise_for_status()  # Ensure the request was successful
+
+        clusters = resp.json().get('data', [])
+        if self.skipClusters:
+            clusters = [cluster for cluster in clusters if cluster['id'] not in self.skipClusters]
+        self.clusters = {x['id']: x['name'] for x in clusters}
+    
     def getClusters(self):
         return self.clusters.values()
 
