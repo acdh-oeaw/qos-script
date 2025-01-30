@@ -40,26 +40,41 @@ class Rancher(ICluster):
     def getClusters(self):
         return self.clusters.values()
 
-    def harvest(self):
-        data = []
-        resp = self.session.get(self.apiBase + '/projects')
-        for project in resp.json()['data']:
-            if (self.project is not None and project['name'] != self.project) or project['name'] in self.skipProjects:
-                continue
-            server = self.clusters[project['clusterId']]
-            if server in self.skipClusters or project['clusterId'] in self.skipClusters:
-                continue
-            try:
-                logging.info('[%s] Processing project %s' % (server, project['name']))
-                resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
-                for workload in resp.json()['data']:
-                    if workload['type'] in self.skipTypes:
-                        continue
+def harvest(self):
+    data = []
+    resp = self.session.get(self.apiBase + '/projects')
+    for project in resp.json()['data']:
+        if (self.project is not None and project['name'] != self.project) or project['name'] in self.skipProjects:
+            continue
+        server = self.clusters[project['clusterId']]
+        if server in self.skipClusters or project['clusterId'] in self.skipClusters:
+            continue
+        try:
+            logging.info('[%s] Processing project %s' % (server, project['name']))
+            resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
+            workloads = resp.json()['data']
+
+            # Fetch ingresses for the project
+            ingresses_resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/ingresses')
+            ingresses = ingresses_resp.json()['data']
+
+            for workload in workloads:
+                if workload['type'] in self.skipTypes:
+                    continue
+
+                # Check if the workload has an associated ingress
+                has_ingress = any(
+                    workload['name'] in ingress['name'] for ingress in ingresses
+                )
+
+                if has_ingress:
                     logging.info('[%s] Processing workload %s' % (server, workload['name']))
                     data.append(self.processWorkload(workload, project))
-            except Exception:
-                logging.error('[%s] %s' % (server, traceback.format_exc()))
-        return data
+                else:
+                    logging.info('[%s] Skipping workload %s (no ingress)' % (server, workload['name']))
+        except Exception:
+            logging.error('[%s] %s' % (server, traceback.format_exc()))
+    return data
 
     def processWorkload(self, cfg, pcfg):
         name = cfg['name']
