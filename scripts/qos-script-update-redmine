@@ -26,6 +26,8 @@ parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--readOnly', action='store_true', help='Only read data and do not update the backend')
 args = parser.parse_args()
 
+print(f"Skip clusters argument: {args.rancherSkipClusters}")
+
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 # log on a console
@@ -54,6 +56,7 @@ try:
             procServers += r.getClusters()
         except Exception:
             logging.error('[%s] %s' % (args.rancherUrl, traceback.format_exc()))
+            
     if not args.readOnly:
         logging.info('Updating backend with the gathered data')
         for i in data:
