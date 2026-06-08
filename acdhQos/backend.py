@@ -56,12 +56,17 @@ class Redmine(IBackend):
         self.session.headers.update({"User-Agent": "ACDH-QoS-Redmine/1.0"})
         
         # Authentication priority: API key takes precedence over Basic Auth
+        self.username = None
+        self.password = None
+        if auth is not None:
+            self.username, self.password = auth
+
         if api_key:
             self.session.headers.update({"X-Redmine-API-Key": api_key})
             self.session.auth = None
         else:
             self.session.auth = auth
-        
+
         self.logIssueId = logIssueId
         self.defaultTrackerId = defTrackerId
         self.defaultProjectId = defProjectId
@@ -219,12 +224,16 @@ class Redmine(IBackend):
 
         loginForm = resp.text.replace('\n', '')
         authToken = re.sub('.*input type="hidden" name="authenticity_token" value="([^"]*)".*', '\\1', loginForm)
+        if not self.username or not self.password:
+            raise Exception(
+                'Redmine username and password are required for notification setup. API key authentication is used for API calls, but login/notification setup still requires username/password.'
+            )
         if authToken != loginForm:
             resp = self._send(
                 'post',
                 self.baseUrl + '/login',
                 cookies=resp.cookies,
-                data={'authenticity_token': authToken, 'username': self.session.auth[0], 'password': self.session.auth[1]},
+                data={'authenticity_token': authToken, 'username': self.username, 'password': self.password},
             )
             if resp is None or resp.status_code != 200:
                 logging.error('[Redmine] Login failed during notification setup')
