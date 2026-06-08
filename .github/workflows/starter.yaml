@@ -16,6 +16,7 @@ jobs:
       environment: ${{ steps.get_environment_from_git_ref.outputs.environment }}
       environment_short: ${{ steps.get_environment_from_git_ref.outputs.environment_short }}
       image_name: qos-script
+      image_tag: ${{ github.sha }}
 # Please note that the next line only works correctly with repositories that don't contain
 # upper case characters. If you have such a repo name please replace ${{ github.repository }}
 # with org/repo-name (all lower case).
@@ -93,7 +94,7 @@ jobs:
     with:
       environment: ${{ needs.setup_workflow_env.outputs.environment}}
       fetch-depth: ${{ fromJson(needs.setup_workflow_env.outputs.fetch-depth) }}
-      DOCKER_TAG: ${{ needs.setup_workflow_env.outputs.registry_root }}${{ needs.setup_workflow_env.outputs.image_name }}
+      DOCKER_TAG: ${{ needs.setup_workflow_env.outputs.registry_root }}${{ needs.setup_workflow_env.outputs.image_name }}:${{ needs.setup_workflow_env.outputs.image_tag }}
       APP_NAME: ${{ needs.setup_workflow_env.outputs.APP_NAME }}-${{ needs.setup_workflow_env.outputs.environment_short }}
       APP_ROOT: ${{ needs.setup_workflow_env.outputs.APP_ROOT }}
       SERVICE_ID: ${{ needs.setup_workflow_env.outputs.SERVICE_ID }}

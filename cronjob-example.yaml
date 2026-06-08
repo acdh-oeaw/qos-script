@@ -22,7 +22,7 @@ spec:
           
           containers:
           - name: qos-script
-            image: qos-script:latest
+            image: ghcr.io/acdh-oeaw/qos-script/qos-script:<replace-with-git-sha>
             imagePullPolicy: Always
             
             env:

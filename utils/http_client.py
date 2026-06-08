@@ -70,9 +70,10 @@ class ResilientHttpClient:
         return self._circuit_breakers[host]
 
     async def __aenter__(self):
+        # Note: 'max_redirects' is not supported in this aiohttp version,
+        # so we rely on aiohttp's default redirect behavior.
         self._session = aiohttp.ClientSession(
             timeout=self.timeout,
-            max_redirects=3,
             headers={"User-Agent": "ACDH-QoS-Check/1.0"},
         )
         return self

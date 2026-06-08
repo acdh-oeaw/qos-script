@@ -20,17 +20,35 @@ class Rancher(ICluster):
     clusters = None
 
     def __init__(self, apiBase, token, project=None, skipProjects=None, skipClusters=None, skipTypes=None):
-        self.apiBase = apiBase
+        self.base_url = apiBase.rstrip('/')
+        self.apiBase = self.base_url
         self.project = project
         self.skipProjects = skipProjects or []
         self.skipClusters = skipClusters or []
         self.skipTypes = skipTypes or []
         
         self.session = requests.Session()
-        self.session.headers = {'Authorization': 'Bearer ' + token}
+        # Rancher expects API keys as a Bearer token in the Authorization header.
+        # A 401/403 usually means the token is invalid, has wrong scope, or lacks permissions.
+        self.session.headers.update({
+            'Authorization': f'Bearer {token}',
+            'Accept': 'application/json',
+            'User-Agent': 'ACDH-QoS-Rancher/1.0',
+        })
 
-        resp = self.session.get(self.apiBase + '/clusters')
-        resp.raise_for_status()  # Ensure the request was successful
+        try:
+            resp = self.session.get(f'{self.base_url}/clusters', timeout=30)
+            resp.raise_for_status()  # Ensure the request was successful
+        except requests.exceptions.HTTPError as e:
+            status = resp.status_code if resp is not None else 'unknown'
+            if status in (401, 403):
+                raise Exception(
+                    f'Failed to authenticate with Rancher at {self.base_url}. '
+                    f'Status code: {status}. Check RANCHER_TOKEN, its scope/permissions, and the Rancher URL.'
+                ) from e
+            raise
+        except requests.RequestException as e:
+            raise Exception(f'Failed to connect to Rancher at {self.base_url}/clusters: {e}') from e
 
         clusters = resp.json().get('data', [])
         if self.skipClusters:
@@ -43,7 +61,8 @@ class Rancher(ICluster):
     def harvest(self):
         data = []
         try:
-            resp = self.session.get(self.apiBase + '/projects')
+            resp = self.session.get(f'{self.base_url}/projects', timeout=30)
+            resp.raise_for_status()
             projects = resp.json().get('data', [])
             logging.info(f"Found {len(projects)} projects")
 
@@ -54,13 +73,15 @@ class Rancher(ICluster):
                     continue
                 try:
                     logging.info(f"Processing project {project['name']}")
-                    resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
+                    resp = self.session.get(f'{self.base_url}/project/{project["id"]}/workloads', timeout=30)
+                    resp.raise_for_status()
                     workloads = resp.json().get('data', [])
                     logging.info(f"Found {len(workloads)} workloads in project {project['name']}")
                     logging.debug("Workloads: %s", workloads)
 
                     # Fetch ingresses for the project
-                    ingresses_resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/ingresses')
+                    ingresses_resp = self.session.get(f'{self.base_url}/project/{project["id"]}/ingresses', timeout=30)
+                    ingresses_resp.raise_for_status()
                     ingresses = ingresses_resp.json().get('data', [])
                     logging.info(f"Found {len(ingresses)} ingresses in project {project['name']}")
                     logging.debug("Ingresses: %s", ingresses)
@@ -111,7 +132,8 @@ class Rancher(ICluster):
         backendConnection = self.getAnnotation(cfg, 'BackendConnection')
 
         users = []
-        resp = self.session.get(self.apiBase + '/project/' + pcfg['id'] + '/projectRoleTemplateBindings')
+        resp = self.session.get(f'{self.base_url}/project/{pcfg["id"]}/projectRoleTemplateBindings', timeout=30)
+        resp.raise_for_status()
         for user in resp.json()['data']:
             if user.get('userPrincipalId') is not None:
                 username = re.sub('.*CN=([^,]*),OU=.*', '\\1', user['userPrincipalId'].replace('\\,', ''))
