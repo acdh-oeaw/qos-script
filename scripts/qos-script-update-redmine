@@ -24,6 +24,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at/')
 parser.add_argument('--redmineUser', default='qosScript')
 parser.add_argument('--redminePswd', default=os.getenv('REDMINE_PSWD'))
+parser.add_argument('--redmineApiKey', default=os.getenv('REDMINE_API_KEY'), help='Redmine API key for token-based authentication (REDMINE_API_KEY env var)')
 parser.add_argument('--redmineLogIssueId', default=18419)
 parser.add_argument('--rancherUrl', default='https://rancher.acdh-dev.oeaw.ac.at/v3')
 parser.add_argument('--rancherToken', default=os.getenv('RANCHER_TOKEN'))
@@ -134,7 +135,14 @@ async def main_async(data: List[Dict[str, Any]], backend: Any = None) -> None:
 
 
 if not args.readOnly:
-    backend = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd), logIssueId=args.redmineLogIssueId)
+    # Prefer API key authentication; fall back to Basic Auth if no key is provided
+    redmine_auth = (args.redmineUser, args.redminePswd) if (args.redmineUser and args.redminePswd) else None
+    backend = Redmine(
+        args.redmineUrl,
+        auth=redmine_auth,
+        api_key=args.redmineApiKey,
+        logIssueId=args.redmineLogIssueId
+    )
     backend.begin()
     logging.info('Backend initialization successful')
 else:

@@ -108,7 +108,13 @@ Run the async runner directly:
 python3 qos_runner.py
 ```
 
-Run the deployed Redmine sync script:
+Run the deployed Redmine sync script with API key (recommended):
+
+```bash
+python3 scripts/qos-script-update-redmine --rancher --rancherUrl "https://rancher.example/v3" --rancherToken "$RANCHER_TOKEN" --redmineApiKey "$REDMINE_API_KEY"
+```
+
+Or using Basic Auth as fallback:
 
 ```bash
 python3 scripts/qos-script-update-redmine --rancher --rancherUrl "https://rancher.example/v3" --rancherToken "$RANCHER_TOKEN" --redminePswd "$REDMINE_PSWD"
@@ -120,17 +126,32 @@ Run in read-only mode:
 python3 scripts/qos-script-update-redmine --rancher --readOnly --rancherUrl "https://rancher.example/v3" --rancherToken "$RANCHER_TOKEN"
 ```
 
+## Redmine authentication
+
+Redmine integration supports two authentication methods:
+
+1. **API Key (recommended)**: Use `--redmineApiKey` or `$REDMINE_API_KEY` environment variable for token-based authentication.
+2. **Basic Auth (fallback)**: Use `--redmineUser` and `--redminePswd` (or `$REDMINE_PSWD`) if no API key is provided.
+
+Authentication priority is: API Key first, then Basic Auth. If an API key is available, it will be used automatically.
+
 ## Legacy restore helper
 
 - `scripts/qos-script-restore-from-redmine`
   - Reads local host `config.json` files under `/home`.
-  - Fetches Redmine issue history for `qosScript` and restores service aliases and backend connection details.
-  - It now supports `--redmineUrl`, `--redmineUser`, and `--homeDir`.
+  - Fetches Redmine issue history and restores service aliases and backend connection details.
+  - Supports both API key and Basic Auth authentication.
 
-Example:
+Example with API key:
 
 ```bash
-python3 scripts/qos-script-restore-from-redmine --redmineUrl https://redmine.acdh.oeaw.ac.at --redmineUser qosScript "$REDMINE_PSWD"
+python3 scripts/qos-script-restore-from-redmine --redmineUrl https://redmine.acdh.oeaw.ac.at --redmineApiKey "$REDMINE_API_KEY" --homeDir /home
+```
+
+Example with Basic Auth:
+
+```bash
+python3 scripts/qos-script-restore-from-redmine --redmineUrl https://redmine.acdh.oeaw.ac.at --redmineUser qosScript --redminePswd "$REDMINE_PSWD" --homeDir /home
 ```
 
 ## Architecture notes

@@ -14,9 +14,10 @@ from pathlib import Path
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Restore historical service data from Redmine.')
-    parser.add_argument('redminePswd', help='Redmine password for the qosScript user')
+    parser.add_argument('--redminePswd', default=os.getenv('REDMINE_PSWD'), help='Redmine password (defaults to REDMINE_PSWD env var)')
     parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at', help='Base Redmine URL')
     parser.add_argument('--redmineUser', default='qosScript', help='Redmine username')
+    parser.add_argument('--redmineApiKey', default=os.getenv('REDMINE_API_KEY'), help='Redmine API key (REDMINE_API_KEY env var)')
     parser.add_argument('--homeDir', default='/home', help='Root folder containing host config.json files')
     parser.add_argument('--outputSuffix', default='_', help='Suffix for backup files before overwrite')
     return parser.parse_args()
@@ -106,8 +107,14 @@ def restore_history(session, base_url, files, all_domains, custom_fields, qos_us
 def main():
     args = parse_args()
     session = requests.Session()
-    session.auth = (args.redmineUser, args.redminePswd)
     session.headers.update({'User-Agent': 'ACDH-QoS-Restore/1.0'})
+    
+    # Authentication priority: API key takes precedence over Basic Auth
+    if args.redmineApiKey:
+        session.headers.update({'X-Redmine-API-Key': args.redmineApiKey})
+        session.auth = None
+    else:
+        session.auth = (args.redmineUser, args.redminePswd)
 
     custom_fields = load_custom_fields(session, args.redmineUrl)
     files, all_domains = read_local_domains(args.homeDir)

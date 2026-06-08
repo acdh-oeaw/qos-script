@@ -46,12 +46,22 @@ class Redmine(IBackend):
     inContainerAppCategory = None
     baseUrl = None
     session = None
+    api_key = None
 
-    def __init__(self, baseUrl, auth, logIssueId=None, defTrackerId=7, defProjectId=164, defStatus=1, defPrority=2, inContainerAppCategory=52):
-        self.baseUrl = baseUrl
+    def __init__(self, baseUrl, auth=None, api_key=None, logIssueId=None, defTrackerId=7, defProjectId=164, defStatus=1, defPrority=2, inContainerAppCategory=52):
+        # Normalize base URL by stripping trailing slash
+        self.baseUrl = baseUrl.rstrip('/')
+        self.api_key = api_key
         self.session = requests.Session()
-        self.session.auth = auth
         self.session.headers.update({"User-Agent": "ACDH-QoS-Redmine/1.0"})
+        
+        # Authentication priority: API key takes precedence over Basic Auth
+        if api_key:
+            self.session.headers.update({"X-Redmine-API-Key": api_key})
+            self.session.auth = None
+        else:
+            self.session.auth = auth
+        
         self.logIssueId = logIssueId
         self.defaultTrackerId = defTrackerId
         self.defaultProjectId = defProjectId
@@ -65,7 +75,8 @@ class Redmine(IBackend):
         self.customFields = {}
         resp = self._send('get', self.baseUrl + '/custom_fields.json')
         if resp is None or resp.status_code != 200:
-            raise Exception('Failed to load Redmine custom fields')
+            auth_method = 'API key' if api_key else 'Basic Auth'
+            raise Exception(f'Failed to load Redmine custom fields (using {auth_method})')
         data = resp.json()
         for i in data['custom_fields']:
             self.customFields[i['name']] = i
