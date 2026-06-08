@@ -1,7 +1,7 @@
 #!python3
 
-# A quick & dirst script restoring data from the Redmine issues history.
-# Kept in the repo in case of similar action needed in the future
+# A quick & dirty script restoring data from the Redmine issues history.
+# Kept in the repo in case a similar action is needed in the future
 
 import argparse
 import json
