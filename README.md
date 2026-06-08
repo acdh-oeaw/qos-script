@@ -69,11 +69,6 @@ How deployment currently works (summary)
 - The build step produces and pushes a Docker image to GitHub Container Registry under `ghcr.io/...`.
 - The deploy step (reusable workflow) applies Helm/Kubernetes manifests with values from `.github/auto-deploy-values.yaml` and organization-level secrets/configuration.
 
-Recommendations
-- Set `replicaCount` > 0 if you want the service to run continuously (not just via CronJob).
-- If you need an externally reachable service enable `ingress` and provide `KUBE_INGRESS_BASE_DOMAIN` via GitHub variables/secrets.
-- Consider pinning the `image.tag` to a release tag instead of `latest` for reproducible deployments.
-
 
 
 
