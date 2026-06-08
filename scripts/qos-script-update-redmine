@@ -5,11 +5,11 @@ import json
 import logging
 import logging.handlers
 import os
-import requests
 import sys
 import tempfile
 import traceback
 from pathlib import Path
+from typing import Any, Dict, List
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -17,6 +17,8 @@ from acdhQos.backend import *
 from acdhQos.cluster import *
 from acdhQos.redmine_helpers import format_container_description_textile
 from checks import check_acdh_logo, check_helpdesk_email, check_accessibility, check_imprint_page
+from config import config as app_config
+from utils.http_client import ResilientHttpClient
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at/')
@@ -34,50 +36,19 @@ parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--readOnly', action='store_true', help='Only read data and do not update the backend')
 args = parser.parse_args()
 
-logging.debug(f"Skip clusters argument: {args.rancherSkipClusters}")
-
+logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO)
 logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-# log on a console
-lh1 = logging.StreamHandler(sys.stdout)
-lh1.setLevel(logging.DEBUG if args.verbose else logging.INFO)
-logger.addHandler(lh1)
+
 # file log which will be stored in the `args.redmineLogIssueId` issue description
 (fh, logPath) = tempfile.mkstemp()
+os.close(fh)
 lh2 = logging.FileHandler(logPath)
 lh2.setLevel(logging.WARNING)
 lh2.setFormatter(logging.Formatter('#%(levelname)s: %(message)s'))
 logger.addHandler(lh2)
 
-def run_all_checks(endpoint_url: str):
-    """Run all QoS checks against a service endpoint using a single request per service."""
-    try:
-        response = requests.get(endpoint_url, timeout=15, verify=False)
-        html = response.text or ""
-        if response.status_code >= 400:
-            return [{
-                "check": "Reachability",
-                "status": "FAIL",
-                "details": f"HTTP {response.status_code}",
-            }]
-    except Exception as exc:
-        logging.warning('Failed to fetch %s: %s', endpoint_url, exc)
-        return [{
-            "check": "Reachability",
-            "status": "FAIL",
-            "details": str(exc),
-        }]
 
-    imprint_result = asyncio.run(check_imprint_page(html=html, url=endpoint_url))
-    return [
-        check_acdh_logo(html=html, url=endpoint_url),
-        check_helpdesk_email(html=html),
-        imprint_result,
-        check_accessibility(html=html, url=endpoint_url),
-    ]
-
-
-def format_checks_for_redmine(checks):
+def format_checks_for_redmine(checks: List[Dict[str, Any]]) -> str:
     """Format check results as a Redmine textile table."""
     lines = ["|_. Check |_. Status |_. Details |"]
     for c in checks:
@@ -95,54 +66,112 @@ def format_checks_for_redmine(checks):
         lines.append(f"| {c['check']} | {status_icon} {c.get('status', 'UNKNOWN')} | {details} |")
     return "\n".join(lines)
 
+
+async def run_all_checks(endpoint_url: str, http_client: ResilientHttpClient) -> List[Dict[str, Any]]:
+    response = await http_client.get(endpoint_url)
+
+    if response["skipped"]:
+        return [{
+            "check": "All",
+            "status": "SKIP",
+            "details": f"Skipped: {response['error']}",
+        }]
+
+    if response["error"] or response["status"] >= 400:
+        error_detail = response["error"] or f"HTTP {response['status']}"
+        return [{
+            "check": "Reachability",
+            "status": "FAIL",
+            "details": error_detail,
+        }]
+
+    html = response["text"]
+
+    return [
+        check_acdh_logo(html=html, url=endpoint_url),
+        check_helpdesk_email(html=html),
+        await check_imprint_page(html=html, url=endpoint_url, http_client=http_client),
+        check_accessibility(html=html, url=endpoint_url),
+    ]
+
+
+async def main_async(data: List[Dict[str, Any]], backend: Any = None) -> None:
+    async with ResilientHttpClient(
+        requests_per_second=app_config["http"]["requests_per_second"],
+        max_concurrent=app_config["http"]["max_concurrent"],
+        timeout_seconds=app_config["http"]["timeout_seconds"],
+        max_retries=app_config["http"]["max_retries"],
+    ) as http_client:
+        if not args.readOnly:
+            logging.info('Updating backend with the gathered data')
+
+        for i in data:
+            try:
+                checks: List[Dict[str, Any]] = []
+                if i.get('endpoint'):
+                    checks = await run_all_checks(i['endpoint'], http_client)
+                    checks_table = format_checks_for_redmine(checks)
+                    logging.info('[%s] QoS checks:\n%s', i.get('server'), checks_table)
+
+                if not args.readOnly and backend is not None:
+                    record = backend.findRecord(i)
+                    record.update(i)
+
+            except RecordNotFound:
+                logging.error('[%s] Backend record not found for: %s', i.get('server'), format_container_description_textile(i))
+            except RecordDuplicated as e:
+                logging.error(
+                    '[%s] Backend record %s duplication between: %s and %s',
+                    i.get('server'),
+                    str(e.id),
+                    format_container_description_textile(e.newData),
+                    format_container_description_textile(e.oldData),
+                )
+            except RecordError as e:
+                logging.error('[%s] %s', i.get('server'), str(e))
+            except Exception:
+                logging.error(traceback.format_exc())
+
+
 if not args.readOnly:
     backend = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd), logIssueId=args.redmineLogIssueId)
     backend.begin()
     logging.info('Backend initialization successful')
+else:
+    backend = None
 
-procServers = [] 
+procServers: List[str] = []
 try:
-    data = []
+    data: List[Dict[str, Any]] = []
     if args.rancher:
         try:
-            r = Rancher(args.rancherUrl, args.rancherToken, args.rancherProject, args.rancherSkipProjects, args.rancherSkipClusters, args.rancherSkipTypes)
+            r = Rancher(
+                args.rancherUrl,
+                args.rancherToken,
+                args.rancherProject,
+                args.rancherSkipProjects,
+                args.rancherSkipClusters,
+                args.rancherSkipTypes,
+            )
             data += r.harvest()
             procServers += r.getClusters()
         except Exception:
-            logging.error('[%s] %s' % (args.rancherUrl, traceback.format_exc()))
-            
-    if not args.readOnly:
-        logging.info('Updating backend with the gathered data')
-        for i in data:
-            try:
-                if i.get('endpoint'):
-                    checks = run_all_checks(i['endpoint'])
-                    checks_table = format_checks_for_redmine(checks)
-                    logging.info('[%s] QoS checks:\n%s' % (i['server'], checks_table))
+            logging.error('[%s] %s', args.rancherUrl, traceback.format_exc())
 
-                record = backend.findRecord(i)
-                record.update(i)
-                # It doesn't make sense to create backend records for non-existing Portainer and Rancher containers
-                #   as it would require adjusting Portainer and Rancher config (storing record id in the service metadata).
-                #   Technically it can be done but as Portainer and Rancher are not reference sources of their services'
-                #   configuration, such a change will be overwritten sooner or later leading to duplication of backend records.
-                # Instead errors are logged and passed to backend's `end()` method which allows review of spotted problems
-                #   and correction at the source.
-            except RecordNotFound:
-                logging.error('[%s] Backend record not found for: %s' % (i['server'], format_container_description_textile(i)))
-            except RecordDuplicated as e:
-                logging.error('[%s] Backend record %s duplication between: %s and %s' % (
-                    i['server'], str(e.id), format_container_description_textile(e.newData), format_container_description_textile(e.oldData)))
-            except RecordError as e:
-                logging.error('[%s] %s' % (i['server'], str(e)))
-    else:
+    if args.readOnly:
         logging.info('Listing harvested data')
+    else:
+        logging.info('Updating backend with the gathered data')
+
+    asyncio.run(main_async(data, backend))
+
+    if args.readOnly:
         for i in data:
-           logging.info(json.dumps(i))
+            logging.info(json.dumps(i))
 except Exception:
     logging.error(traceback.format_exc())
 finally:
-    if not args.readOnly:
+    if not args.readOnly and backend is not None:
         with open(logPath) as fd:
             backend.end(fd.read(), procServers)
     os.unlink(logPath)
