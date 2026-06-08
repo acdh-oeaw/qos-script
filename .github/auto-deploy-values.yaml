@@ -1,8 +1,11 @@
 replicaCount: 0
 
+# IMAGE_TAG should be replaced by the pipeline with the SHA of the built image.
+# This avoids using the mutable 'latest' tag and ensures the deployed CronJob
+# runs the exact image produced in the previous stage.
 image:
   repository: ghcr.io/acdh-oeaw/qos-script/qos-script
-  tag: latest
+  tag: "${IMAGE_TAG}"
   pullPolicy: Always
 
 ingress:
@@ -19,7 +22,7 @@ cronjobs:
     schedule: "0 8 * * 5" # Adjust the schedule as needed
     image:
       repository: ghcr.io/acdh-oeaw/qos-script/qos-script
-      tag: latest
+      tag: "${IMAGE_TAG}"
     command: [ "/bin/bash" ]
     args: [ "-c", "python /app/scripts/qos-script-update-redmine --redminePswd $REDMINE_PSWD --rancher --rancherUrl $RANCHER_URL --rancherToken $RANCHER_TOKEN --rancherSkipClusters $SKIP_CLUSTERS --rancherSkipTypes $SKIP_TYPES --verbose" ]
     concurrencyPolicy: Forbid
