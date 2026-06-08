@@ -97,6 +97,24 @@ class ResilientHttpClient:
                 try:
                     async with self._session.get(url, ssl=False) as resp:
                         text = await resp.text()
+                        if resp.status >= 400:
+                            if resp.status in (429, 500, 502, 503, 504) and attempt < self.max_retries:
+                                wait = int(resp.headers.get("Retry-After", 2 ** attempt))
+                                logger.warning(
+                                    f"Transient HTTP {resp.status} for {url}, retrying after {wait}s"
+                                )
+                                cb.record_failure()
+                                await asyncio.sleep(wait)
+                                continue
+
+                            cb.record_failure()
+                            return {
+                                "status": resp.status,
+                                "text": text,
+                                "error": f"HTTP {resp.status}",
+                                "skipped": False,
+                            }
+
                         cb.record_success()
                         return {
                             "status": resp.status,

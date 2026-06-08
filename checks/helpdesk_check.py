@@ -6,7 +6,7 @@ from config import config
 def check_helpdesk_email(html: str, expected_email: str = None) -> dict:
     """Check if the page HTML contains the helpdesk email address."""
     if expected_email is None:
-        expected_email = config.get("helpdesk_email")
+        expected_email = config.get("checks", {}).get("helpdesk_email")
 
     result = {"check": "Helpdesk Email", "status": "FAIL", "details": ""}
     try:

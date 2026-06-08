@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-# A quick & dirty script restoring data from the Redmine issues history.
-# Kept in the repo in case a similar action is needed in the future
+# Restore service data from Redmine issue history.
+# This helper script is kept in the repository for migration and recovery use cases.
 
 import argparse
 import json
@@ -9,79 +9,111 @@ import os
 import re
 import requests
 import shutil
+from pathlib import Path
 
-parser = argparse.ArgumentParser()
-parser.add_argument('redminePswd')
-args = parser.parse_args()
 
-baseUrl = 'https://redmine.acdh.oeaw.ac.at'
-auth = ('qosScript', args.redminePswd)
-qosUserId = 460
+def parse_args():
+    parser = argparse.ArgumentParser(description='Restore historical service data from Redmine.')
+    parser.add_argument('redminePswd', help='Redmine password for the qosScript user')
+    parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at', help='Base Redmine URL')
+    parser.add_argument('--redmineUser', default='qosScript', help='Redmine username')
+    parser.add_argument('--homeDir', default='/home', help='Root folder containing host config.json files')
+    parser.add_argument('--outputSuffix', default='_', help='Suffix for backup files before overwrite')
+    return parser.parse_args()
 
-customFields = {}
-resp = requests.get(baseUrl + '/custom_fields.json', auth=auth)
-data = resp.json()
-for i in data['custom_fields']:
-  customFields[i['name']] = i
 
-allDomains = []
-domains = {}
-for i in os.listdir('/home'):
-  i = os.path.join('/home', i, 'config.json')
-  if os.path.exists(i):
-    domains[i] = []
-    with open(i, 'r') as f:
-      cfg = json.load(f)
-    for c in cfg:
-      tmp = []
-      if 'ServerName' in c:
-        tmp.append(c['ServerName'])
-      if 'ServerAlias' in c:
-        if isinstance(c['ServerAlias'], list):
-          tmp += c['ServerAlias']
-        else:
-          tmp.append(c['ServerAlias'])
-      allDomains += tmp
-      domains[i].append(set(tmp))
-allDomains = set(allDomains)
-   
-for i in os.listdir('/home'):
-  i = os.path.join('/home', i, 'config.json')
-  if os.path.exists(i):
-    with open(i, 'r') as f:
-      cfg = json.load(f)
-    n = -1
-    for c in cfg:
-      n += 1
-      if 'ID' in c:
-        resp = requests.get(baseUrl + '/issues/' + str(c['ID']) + '.json?include=journals', auth=auth)
-        if resp.status_code == 200:
-          d = resp.json()['issue']['journals']
-          for j in d:
-            if j['user']['id'] == qosUserId:
-              for k in j['details']:
-                if k['property'] == 'cf' and int(k['name']) == 8:
-                  aliases = []
-                  dbs = []
-                  for l in k['old_value'].split('\n'):
-                    l = l.strip()
-                    if re.search('db:', l):
-                      dbs.append(l.replace('db:', '').strip())
-                    elif re.search('https?://', l):
-                      aliases.append(re.sub('^.*https?://([^/ :]+).*$', '\\1', l))
-                  c['RedmineLocation'] = k['old_value']
-                  if len(aliases) > 0:
-                    aliases = set(aliases) - allDomains
-                    allDomains = allDomains.union(aliases)
-                    if 'ServerAlias' not in c:
-                      c['ServerAlias'] = []
-                    if not isinstance(c['ServerAlias'], list):
-                      c['ServerAlias'] = [c['ServerAlias']]
-                    c['ServerAlias'] += list(aliases)
-                  if len(dbs) > 0:
-                    c['BackendConnection'] = '\n'.join(dbs)
-              break
-    shutil.copyfile(i, i + '_')
-    with open(i, 'w') as f:
-      cfg = json.dump(cfg, f, indent=2)
+def load_custom_fields(session, base_url):
+    resp = session.get(f'{base_url}/custom_fields.json')
+    resp.raise_for_status()
+    return {item['name']: item for item in resp.json().get('custom_fields', [])}
+
+
+def read_local_domains(home_dir):
+    all_domains = set()
+    files = []
+    for entry in os.listdir(home_dir):
+        config_path = Path(home_dir) / entry / 'config.json'
+        if config_path.exists():
+            files.append(config_path)
+            with config_path.open('r', encoding='utf-8') as f:
+                cfg = json.load(f)
+            for service in cfg:
+                if 'ServerName' in service:
+                    all_domains.add(service['ServerName'])
+                aliases = service.get('ServerAlias')
+                if aliases:
+                    if isinstance(aliases, list):
+                        all_domains.update(aliases)
+                    else:
+                        all_domains.add(aliases)
+    return files, all_domains
+
+
+def restore_history(session, base_url, files, all_domains, custom_fields, qos_user_id=460, backup_suffix='_'):
+    for config_path in files:
+        with config_path.open('r', encoding='utf-8') as f:
+            cfg = json.load(f)
+
+        modified = False
+        for service in cfg:
+            if 'ID' not in service:
+                continue
+
+            resp = session.get(f'{base_url}/issues/{service["ID"]}.json?include=journals')
+            if resp.status_code != 200:
+                continue
+
+            journals = resp.json().get('issue', {}).get('journals', [])
+            for journal in journals:
+                if journal.get('user', {}).get('id') != qos_user_id:
+                    continue
+                for detail in journal.get('details', []):
+                    if detail.get('property') != 'cf' or int(detail.get('name', 0)) != 8:
+                        continue
+
+                    aliases = []
+                    dbs = []
+                    for line in detail.get('old_value', '').split('\n'):
+                        line = line.strip()
+                        if re.search(r'db:', line):
+                            dbs.append(line.replace('db:', '').strip())
+                        elif re.search(r'https?://', line):
+                            aliases.append(re.sub(r'^.*https?://([^/ :]+).*$', r'\\1', line))
+
+                    service['RedmineLocation'] = detail.get('old_value', '')
+                    new_aliases = [alias for alias in aliases if alias not in all_domains]
+                    if new_aliases:
+                        all_domains.update(new_aliases)
+                        if 'ServerAlias' not in service:
+                            service['ServerAlias'] = []
+                        if not isinstance(service['ServerAlias'], list):
+                            service['ServerAlias'] = [service['ServerAlias']]
+                        service['ServerAlias'] += new_aliases
+                        modified = True
+
+                    if dbs:
+                        service['BackendConnection'] = '\n'.join(dbs)
+                        modified = True
+                break
+
+        if modified:
+            backup_path = config_path.with_name(config_path.name + backup_suffix)
+            shutil.copyfile(config_path, backup_path)
+            with config_path.open('w', encoding='utf-8') as f:
+                json.dump(cfg, f, indent=2)
+
+
+def main():
+    args = parse_args()
+    session = requests.Session()
+    session.auth = (args.redmineUser, args.redminePswd)
+    session.headers.update({'User-Agent': 'ACDH-QoS-Restore/1.0'})
+
+    custom_fields = load_custom_fields(session, args.redmineUrl)
+    files, all_domains = read_local_domains(args.homeDir)
+    restore_history(session, args.redmineUrl, files, all_domains, custom_fields, backup_suffix=args.outputSuffix)
+
+
+if __name__ == '__main__':
+    main()
 

@@ -8,7 +8,7 @@ def check_acdh_logo(html: str, url: str = "") -> dict:
     result = {"check": "ACDH Logo", "status": "FAIL", "details": ""}
     try:
         soup = BeautifulSoup(html, "html.parser")
-        logo_patterns = config.get("logo_patterns", [])
+        logo_patterns = config.get("checks", {}).get("logo_patterns", [])
 
         for img in soup.find_all("img"):
             src = (img.get("src") or "").lower()

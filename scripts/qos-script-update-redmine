@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
+import asyncio
 import json
 import logging
 import logging.handlers
 import os
+import requests
 import sys
 import tempfile
 import traceback
@@ -48,12 +50,30 @@ lh2.setFormatter(logging.Formatter('#%(levelname)s: %(message)s'))
 logger.addHandler(lh2)
 
 def run_all_checks(endpoint_url: str):
-    """Run all QoS checks against a service endpoint."""
+    """Run all QoS checks against a service endpoint using a single request per service."""
+    try:
+        response = requests.get(endpoint_url, timeout=15, verify=False)
+        html = response.text or ""
+        if response.status_code >= 400:
+            return [{
+                "check": "Reachability",
+                "status": "FAIL",
+                "details": f"HTTP {response.status_code}",
+            }]
+    except Exception as exc:
+        logging.warning('Failed to fetch %s: %s', endpoint_url, exc)
+        return [{
+            "check": "Reachability",
+            "status": "FAIL",
+            "details": str(exc),
+        }]
+
+    imprint_result = asyncio.run(check_imprint_page(html=html, url=endpoint_url))
     return [
-        check_acdh_logo(endpoint_url),
-        check_helpdesk_email(endpoint_url),
-        check_imprint_page(endpoint_url),
-        check_accessibility(endpoint_url),
+        check_acdh_logo(html=html, url=endpoint_url),
+        check_helpdesk_email(html=html),
+        imprint_result,
+        check_accessibility(html=html, url=endpoint_url),
     ]
 
 

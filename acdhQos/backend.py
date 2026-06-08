@@ -2,8 +2,10 @@ import datetime
 import json
 import logging
 import re
-import requests
+import time
 import urllib
+import requests
+from requests.exceptions import RequestException
 
 from acdhQos.interface import *
 
@@ -48,26 +50,60 @@ class Redmine(IBackend):
         self.baseUrl = baseUrl
         self.session = requests.Session()
         self.session.auth = auth
+        self.session.headers.update({"User-Agent": "ACDH-QoS-Redmine/1.0"})
         self.logIssueId = logIssueId
         self.defaultTrackerId = defTrackerId
         self.defaultProjectId = defProjectId
         self.defaultStatus = defStatus
         self.defaultPrority = defPrority
         self.inContainerAppCategory = inContainerAppCategory
-        
+        self._min_interval = 1.0
+        self._last_request_time = 0.0
+
         # custom fields
         self.customFields = {}
-        resp = self.session.get(self.baseUrl + '/custom_fields.json')
+        resp = self._send('get', self.baseUrl + '/custom_fields.json')
+        if resp is None or resp.status_code != 200:
+            raise Exception('Failed to load Redmine custom fields')
         data = resp.json()
         for i in data['custom_fields']:
             self.customFields[i['name']] = i
 
         # environment types
         self.envTypes = {}
-        resp = self.session.get(self.baseUrl + '/issues.json', data={'cf_' + str(self.customFields['tags']['id']): 'environment type', 'status_id': '*', 'limit': 100})
+        resp = self._send(
+            'get',
+            self.baseUrl + '/issues.json',
+            data={'cf_' + str(self.customFields['tags']['id']): 'environment type', 'status_id': '*', 'limit': 100},
+        )
+        if resp is None or resp.status_code != 200:
+            raise Exception('Failed to load Redmine environment types')
         data = resp.json()
         for i in data['issues']:
             self.envTypes[i['subject'].lower().split(' ')[0]] = i['id']
+
+    def _throttle(self):
+        now = time.monotonic()
+        elapsed = now - self._last_request_time
+        if elapsed < self._min_interval:
+            time.sleep(self._min_interval - elapsed)
+        self._last_request_time = time.monotonic()
+
+    def _send(self, method, url, **kwargs):
+        self._throttle()
+        try:
+            resp = getattr(self.session, method)(url, **kwargs)
+        except RequestException as e:
+            logging.error(f'[Redmine] {method.upper()} {url} failed: {e}')
+            return None
+        except Exception as e:
+            logging.error(f'[Redmine] unexpected error for {method.upper()} {url}: {e}')
+            return None
+
+        if resp.status_code >= 500:
+            logging.warning(f'[Redmine] {method.upper()} {url} returned {resp.status_code}')
+
+        return resp
 
     def begin(self):
         self.setupNotifications(False)
@@ -80,8 +116,8 @@ class Redmine(IBackend):
     def saveLog(self, log, procServers):
         # get the current log and split it into entries - we must combine it with the new one
         url = '%s/issues/%s.json' % (self.baseUrl, str(self.logIssueId))
-        resp = self.session.get(url)
-        if resp.status_code != 200:
+        resp = self._send('get', url)
+        if resp is None or resp.status_code != 200:
             raise Exception('Fetching Redmine log issue failed')
         desc = self.parseRedmineDescription(resp.json()['issue']['description'])
         log = self.parseLog(log)
@@ -101,8 +137,8 @@ class Redmine(IBackend):
             'description': desc,
             'due_date': str(datetime.date.today())
         }}
-        resp = self.session.put(url, json=data)
-        if resp.status_code != 200 and resp.status_code != 204:
+        resp = self._send('put', url, json=data)
+        if resp is None or (resp.status_code != 200 and resp.status_code != 204):
             raise Exception('Updating Redmine log issue failed')
 
     def parseLog(self, log):
@@ -129,10 +165,10 @@ class Redmine(IBackend):
                 {'id': self.customFields['server']['id'], 'value': data['server']}
             ]
         }}
-        resp = self.session.post(self.baseUrl + '/issues.json', json=reqData)
-        if resp.status_code != 201:
+        resp = self._send('post', self.baseUrl + '/issues.json', json=reqData)
+        if resp is None or resp.status_code != 201:
             raise RecordCreationFailed(reqData, resp)
-        
+
         respData = resp.json()['issue']
         url = '%s/issues/%s.json' % (self.baseUrl, str(respData['id']))
         record = RedmineRecord(url, self, respData)
@@ -142,21 +178,37 @@ class Redmine(IBackend):
 
     def findRecord(self, data) -> IRecord:
         url = '%s/issues/%s.json' % (self.baseUrl, str(data['id']))
-        resp = self.session.get(url)
-        if resp.status_code == 404:
+        resp = self._send('get', url)
+        if resp is None or resp.status_code == 404:
             raise RecordNotFound()
         if resp.status_code != 200:
             raise RecordNotFound(str(resp.status_code) + ' ' + resp.text + ' (ID ' + str(id) + ')')
         return RedmineRecord(url, self, resp.json()['issue'])
 
     def setupNotifications(self, on):
-        resp = self.session.get(self.baseUrl + '/login')
+        resp = self._send('get', self.baseUrl + '/login')
+        if resp is None or resp.status_code != 200:
+            logging.error('[Redmine] Unable to load login page for notification setup')
+            return
+
         loginForm = resp.text.replace('\n', '')
         authToken = re.sub('.*input type="hidden" name="authenticity_token" value="([^"]*)".*', '\\1', loginForm)
         if authToken != loginForm:
-            resp = self.session.post(self.baseUrl + '/login', cookies=resp.cookies, data={'authenticity_token': authToken, 'username': self.session.auth[0], 'password': self.session.auth[1]})
+            resp = self._send(
+                'post',
+                self.baseUrl + '/login',
+                cookies=resp.cookies,
+                data={'authenticity_token': authToken, 'username': self.session.auth[0], 'password': self.session.auth[1]},
+            )
+            if resp is None or resp.status_code != 200:
+                logging.error('[Redmine] Login failed during notification setup')
+                return
 
-        resp = self.session.get(self.baseUrl + '/settings?tab=notifications', cookies=resp.cookies)
+        resp = self._send('get', self.baseUrl + '/settings?tab=notifications', cookies=resp.cookies)
+        if resp is None or resp.status_code != 200:
+            logging.error('[Redmine] Unable to load notification settings page')
+            return
+
         form = re.sub('</form>.*', '', re.sub('^.*<form action="/settings/edit[?]tab=notifications"[^>]*>', '', resp.text.replace('\n', '')))
 
         issueUpdateRe = '<input type="checkbox" name="settings\\[notified_events\\]\\[\\]" value="issue_updated"[^/]*checked="checked"[^/]*/>'
@@ -179,9 +231,14 @@ class Redmine(IBackend):
                 if not chbs[nChb]:
                     continue
             data += urllib.parse.quote(formFields[i], safe='') + '=' + urllib.parse.quote(formValues[i], safe='') + '&'
-        resp = self.session.post('https://redmine.acdh.oeaw.ac.at/settings/edit?tab=notifications', cookies=resp.cookies, data=data)
-        if resp.status_code != 200:
-            raise Exception(f'setting up Redmine notifications failed with {resp.status_code}')
+        resp = self._send(
+            'post',
+            'https://redmine.acdh.oeaw.ac.at/settings/edit?tab=notifications',
+            cookies=resp.cookies,
+            data=data,
+        )
+        if resp is None or resp.status_code != 200:
+            logging.error(f'setting up Redmine notifications failed with {resp.status_code if resp else "no response"}')
 
 class RedmineRecord(IRecord):
 

@@ -10,3 +10,19 @@ checks:
     - "impressum"
     - "legal-notice"
     - "legal_notice"
+
+http:
+  requests_per_second: 2.0
+  max_concurrent: 5
+  timeout_seconds: 15
+  max_retries: 2
+
+k8s:
+  requests_per_second: 5.0
+
+runner:
+  batch_size: 10
+  batch_delay: 2.0
+
+redmine:
+  request_interval_seconds: 1.0

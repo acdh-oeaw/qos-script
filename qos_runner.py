@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from checks import check_acdh_logo, check_helpdesk_email, check_accessibility, check_imprint_page
+from config import config as app_config
 from utils.http_client import ResilientHttpClient
 from utils.k8s_client import ThrottledK8sClient
 
@@ -12,12 +13,25 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class QoSConfig:
-    http_requests_per_second: float = 2.0
-    max_concurrent_http: int = 5
-    http_timeout: int = 15
-    k8s_requests_per_second: float = 5.0
-    batch_size: int = 10
-    batch_delay: float = 2.0
+    http_requests_per_second: float
+    max_concurrent_http: int
+    http_timeout: int
+    max_retries: int
+    k8s_requests_per_second: float
+    batch_size: int
+    batch_delay: float
+
+    @classmethod
+    def from_config(cls, cfg: Dict[str, Any]):
+        return cls(
+            http_requests_per_second=cfg["http"]["requests_per_second"],
+            max_concurrent_http=cfg["http"]["max_concurrent"],
+            http_timeout=cfg["http"]["timeout_seconds"],
+            max_retries=cfg["http"]["max_retries"],
+            k8s_requests_per_second=cfg["k8s"]["requests_per_second"],
+            batch_size=cfg["runner"]["batch_size"],
+            batch_delay=cfg["runner"]["batch_delay"],
+        )
 
 
 def format_checks_for_redmine(checks: List[Dict[str, Any]]) -> str:
@@ -52,11 +66,12 @@ async def run_checks_for_service(
         })
         return result
 
-    if response["error"]:
+    if response["error"] or response["status"] >= 400:
+        error_detail = response["error"] or f"HTTP {response['status']}"
         result["checks"].append({
             "check": "Reachability",
             "status": "FAIL",
-            "details": response["error"],
+            "details": error_detail,
         })
         return result
 
@@ -72,7 +87,16 @@ async def run_checks_for_service(
 
 
 async def main():
-    config = QoSConfig()
+    config = QoSConfig.from_config(app_config)
+    logger.info(
+        "Starting QoS run: http_rps=%s max_http=%s timeout=%ss batch_size=%s batch_delay=%ss k8s_rps=%s",
+        config.http_requests_per_second,
+        config.max_concurrent_http,
+        config.http_timeout,
+        config.batch_size,
+        config.batch_delay,
+        config.k8s_requests_per_second,
+    )
     k8s = ThrottledK8sClient(requests_per_second=config.k8s_requests_per_second)
     ingresses = await k8s.get_all_ingresses()
 
@@ -94,6 +118,7 @@ async def main():
         requests_per_second=config.http_requests_per_second,
         max_concurrent=config.max_concurrent_http,
         timeout_seconds=config.http_timeout,
+        max_retries=config.max_retries,
     ) as http_client:
         all_results = []
         for i in range(0, len(services), config.batch_size):
