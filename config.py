@@ -35,6 +35,8 @@ DEFAULTS = {
     "runner": {
         "batch_size": 10,
         "batch_delay": 2.0,
+        "max_services": 0,
+        "dry_run": False,
     },
     "redmine": {
         "request_interval_seconds": 1.0,
@@ -56,6 +58,23 @@ def _int_env(name, default):
         return int(value)
     except ValueError:
         return default
+
+
+def _float_env(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
+def _bool_env(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
 
 
 def _float_env(name, default):
@@ -126,6 +145,12 @@ def _apply_env_overrides(config):
     )
     config["runner"]["batch_delay"] = _float_env(
         "QOS_BATCH_DELAY", config["runner"]["batch_delay"]
+    )
+    config["runner"]["max_services"] = _int_env(
+        "QOS_MAX_SERVICES", config["runner"]["max_services"]
+    )
+    config["runner"]["dry_run"] = _bool_env(
+        "QOS_DRY_RUN", config["runner"]["dry_run"]
     )
 
     config["redmine"]["request_interval_seconds"] = _float_env(

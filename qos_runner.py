@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 from dataclasses import dataclass
 from typing import Any, Dict, List
 
@@ -20,6 +21,8 @@ class QoSConfig:
     k8s_requests_per_second: float
     batch_size: int
     batch_delay: float
+    max_services: int
+    dry_run: bool
 
     @classmethod
     def from_config(cls, cfg: Dict[str, Any]):
@@ -31,6 +34,8 @@ class QoSConfig:
             k8s_requests_per_second=cfg["k8s"]["requests_per_second"],
             batch_size=cfg["runner"]["batch_size"],
             batch_delay=cfg["runner"]["batch_delay"],
+            max_services=cfg["runner"]["max_services"],
+            dry_run=cfg["runner"]["dry_run"],
         )
 
 
@@ -50,13 +55,31 @@ def format_checks_for_redmine(checks: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+async def fetch_service_page(
+    http_client: ResilientHttpClient,
+    url: str,
+    dry_run: bool,
+) -> Dict[str, Any]:
+    """Fetch a service page or simulate a response in dry-run mode."""
+    if dry_run:
+        logger.info("Dry run: simulating fetch for %s", url)
+        return {
+            "status": 200,
+            "text": "<html><head><title>Dry run</title></head><body>Dry run content</body></html>",
+            "error": None,
+            "skipped": False,
+        }
+    return await http_client.get(url)
+
+
 async def run_checks_for_service(
     http_client: ResilientHttpClient,
     url: str,
     service_name: str,
+    dry_run: bool,
 ) -> Dict[str, Any]:
     result = {"service": service_name, "url": url, "checks": []}
-    response = await http_client.get(url)
+    response = await fetch_service_page(http_client, url, dry_run)
 
     if response["skipped"]:
         result["checks"].append({
@@ -98,21 +121,45 @@ async def main():
         config.k8s_requests_per_second,
     )
     k8s = ThrottledK8sClient(requests_per_second=config.k8s_requests_per_second)
-    ingresses = await k8s.get_all_ingresses()
+    logger.info("Starting service discovery")
+    service_count = 0
 
-    services = []
-    for ingress in ingresses:
-        annotations = getattr(ingress.metadata, "annotations", {}) or {}
-        for rule in getattr(ingress.spec, "rules", []) or []:
-            if getattr(rule, "host", None):
-                services.append({
-                    "name": ingress.metadata.name,
-                    "namespace": ingress.metadata.namespace,
-                    "url": f"https://{rule.host}",
-                    "annotations": annotations,
-                })
+    async def iter_service_batches():
+        nonlocal service_count
+        batch: List[Dict[str, Any]] = []
+        async for ingress in k8s.list_ingresses():
+            annotations = getattr(ingress.metadata, "annotations", {}) or {}
+            for rule in getattr(ingress.spec, "rules", []) or []:
+                if getattr(rule, "host", None):
+                    service_count += 1
+                    batch.append({
+                        "name": f"{ingress.metadata.namespace}/{ingress.metadata.name}",
+                        "namespace": ingress.metadata.namespace,
+                        "url": f"https://{rule.host}",
+                        "annotations": annotations,
+                    })
+                    if len(batch) >= config.batch_size:
+                        yield batch
+                        batch = []
+                    if config.max_services > 0 and service_count >= config.max_services:
+                        if batch:
+                            yield batch
+                        return
+        if batch:
+            yield batch
 
-    logger.info(f"Found {len(services)} services to check")
+    def _build_failure_result(service: Dict[str, Any], error: Exception) -> Dict[str, Any]:
+        return {
+            "service": service.get("name", "unknown"),
+            "url": service.get("url", ""),
+            "checks": [
+                {
+                    "check": "Service Execution",
+                    "status": "ERROR",
+                    "details": f"{type(error).__name__}: {error}",
+                }
+            ],
+        }
 
     async with ResilientHttpClient(
         requests_per_second=config.http_requests_per_second,
@@ -121,28 +168,32 @@ async def main():
         max_retries=config.max_retries,
     ) as http_client:
         all_results = []
-        for i in range(0, len(services), config.batch_size):
-            batch = services[i : i + config.batch_size]
-            batch_num = i // config.batch_size + 1
-            total_batches = (len(services) + config.batch_size - 1) // config.batch_size
-            logger.info(f"Processing batch {batch_num}/{total_batches}")
-
+        batch_num = 0
+        async for batch in iter_service_batches():
+            batch_num += 1
+            logger.info("Processing batch %s", batch_num)
             tasks = [
-                run_checks_for_service(http_client, svc["url"], svc["name"])
+                run_checks_for_service(
+                    http_client,
+                    svc["url"],
+                    svc["name"],
+                    config.dry_run,
+                )
                 for svc in batch
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            for r in results:
-                if isinstance(r, Exception):
-                    logger.error(f"Batch task failed: {r}")
+            for service, result in zip(batch, results):
+                if isinstance(result, Exception):
+                    logger.error("Service task failed: %s", traceback.format_exception_only(type(result), result)[0].strip())
+                    all_results.append(_build_failure_result(service, result))
                 else:
-                    all_results.append(r)
+                    all_results.append(result)
 
-            if i + config.batch_size < len(services):
-                logger.info(f"Batch delay: {config.batch_delay}s")
-                await asyncio.sleep(config.batch_delay)
+            logger.info("Batch delay: %ss", config.batch_delay)
+            await asyncio.sleep(config.batch_delay)
 
+    logger.info("Discovered %s services", service_count)
     logger.info("QoS check run finished")
     for result in all_results:
         logger.info("%s\n%s", result["service"], format_checks_for_redmine(result["checks"]))

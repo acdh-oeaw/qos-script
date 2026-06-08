@@ -10,7 +10,14 @@ def check_helpdesk_email(html: str, expected_email: str = None) -> dict:
 
     result = {"check": "Helpdesk Email", "status": "FAIL", "details": ""}
     try:
-        if expected_email in html:
+        if expected_email is None:
+            result["status"] = "SKIP"
+            result["details"] = "Helpdesk email not configured"
+            return result
+
+        normalized_html = html.lower()
+        normalized_email = expected_email.lower()
+        if normalized_email in normalized_html:
             result["status"] = "PASS"
             result["details"] = f"Found {expected_email}"
             return result
@@ -18,7 +25,7 @@ def check_helpdesk_email(html: str, expected_email: str = None) -> dict:
         soup = BeautifulSoup(html, "html.parser")
         mailto_links = soup.find_all("a", href=lambda h: h and "mailto:" in h)
         for link in mailto_links:
-            if expected_email in link.get("href", ""):
+            if normalized_email in link.get("href", "").lower():
                 result["status"] = "PASS"
                 result["details"] = f"Found mailto link: {link.get('href')}"
                 return result

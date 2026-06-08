@@ -8,6 +8,7 @@ import requests
 from requests.exceptions import RequestException
 
 from acdhQos.interface import *
+from acdhQos.redmine_helpers import format_container_description_textile
 
 
 class RecordNotFound(Exception):
@@ -132,7 +133,21 @@ class Redmine(IBackend):
         desc.sort()
 
         # update the redmine issue
-        desc = '|Severity|Server|Message|Container Description|\n' + '\n'.join(desc)
+        formatted = []
+        for item in desc:
+            if len(item) == 4:
+                severity, server, message, data_field = item
+                if isinstance(data_field, str) and data_field.strip().startswith('{') and data_field.strip().endswith('}'):
+                    try:
+                        container_info = json.loads(data_field)
+                        data_field = format_container_description_textile(container_info)
+                    except Exception:
+                        pass
+                formatted.append('|'.join([severity, server, message, data_field]))
+            else:
+                formatted.append('|'.join(item))
+
+        desc = '|Severity|Server|Message|Container Description|\n' + '\n'.join(formatted)
         data = {'issue': {
             'description': desc,
             'due_date': str(datetime.date.today())

@@ -31,66 +31,49 @@ class ThrottledK8sClient:
             await asyncio.sleep(self._min_interval - elapsed)
         self._last_call = time.monotonic()
 
-    async def get_all_ingresses(self) -> List[Any]:
-        cache_key = "ingresses"
-        if cache_key in self._cache:
-            return self._cache[cache_key]
+    async def _call_api(self, func, **kwargs):
+        return await asyncio.to_thread(func, **kwargs)
 
-        ingresses = []
+    async def _stream_resources(self, api_call, **kwargs):
         _continue = None
-
+        backoff = 5
         while True:
             await self._throttle()
             try:
-                resp = self.networking_v1.list_ingress_for_all_namespaces(
-                    limit=100,
-                    _continue=_continue,
-                )
-                ingresses.extend(resp.items)
-                _continue = resp.metadata._continue
+                resp = await self._call_api(api_call, limit=100, _continue=_continue, **kwargs)
+                for item in getattr(resp, "items", []):
+                    yield item
+                _continue = getattr(resp.metadata, "_continue", None)
                 if not _continue:
                     break
+                backoff = 5
             except ApiException as e:
                 if e.status == 429:
-                    retry_after = int(e.headers.get("Retry-After", 5))
+                    retry_after = int(e.headers.get("Retry-After", backoff))
                     logger.warning(f"K8s API throttled, waiting {retry_after}s")
                     await asyncio.sleep(retry_after)
+                    backoff = min(backoff * 2, 60)
                     continue
                 raise
 
-        self._cache[cache_key] = ingresses
-        logger.info(f"Fetched {len(ingresses)} ingresses")
+    async def list_ingresses(self):
+        async for ingress in self._stream_resources(self.networking_v1.list_ingress_for_all_namespaces):
+            yield ingress
+
+    async def get_all_ingresses(self) -> List[Any]:
+        ingresses = []
+        async for ingress in self.list_ingresses():
+            ingresses.append(ingress)
         return ingresses
 
+    async def list_deployments(self):
+        async for deployment in self._stream_resources(self.apps_v1.list_deployment_for_all_namespaces):
+            yield deployment
+
     async def get_all_deployments(self) -> List[Any]:
-        cache_key = "deployments"
-        if cache_key in self._cache:
-            return self._cache[cache_key]
-
         deployments = []
-        _continue = None
-
-        while True:
-            await self._throttle()
-            try:
-                resp = self.apps_v1.list_deployment_for_all_namespaces(
-                    limit=100,
-                    _continue=_continue,
-                )
-                deployments.extend(resp.items)
-                _continue = resp.metadata._continue
-                if not _continue:
-                    break
-            except ApiException as e:
-                if e.status == 429:
-                    retry_after = int(e.headers.get("Retry-After", 5))
-                    logger.warning(f"K8s API throttled, waiting {retry_after}s")
-                    await asyncio.sleep(retry_after)
-                    continue
-                raise
-
-        self._cache[cache_key] = deployments
-        logger.info(f"Fetched {len(deployments)} deployments")
+        async for deployment in self.list_deployments():
+            deployments.append(deployment)
         return deployments
 
     def clear_cache(self):
