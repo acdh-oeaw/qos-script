@@ -126,6 +126,17 @@ Run in read-only mode:
 python3 scripts/qos-script-update-redmine --rancher --readOnly --rancherUrl "https://rancher.example/v3" --rancherToken "$RANCHER_TOKEN"
 ```
 
+## GitHub environment variables
+
+For GitHub Actions or CI deployments, configure these environment variables:
+
+- `RANCHER_TOKEN`: Rancher API token used to harvest service metadata.
+- `REDMINE_API_KEY`: Redmine API key (preferred).
+- `REDMINE_USER`: Redmine username (fallback).
+- `REDMINE_PSWD`: Redmine password (fallback).
+
+If `REDMINE_API_KEY` is set, the script uses token-based authentication. If it is not present, the script falls back to Basic Auth using `REDMINE_USER` and `REDMINE_PSWD`.
+
 ## Redmine authentication
 
 Redmine integration supports two authentication methods:
