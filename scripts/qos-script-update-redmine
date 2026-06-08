@@ -1,14 +1,20 @@
-#!python3
+#!/usr/bin/env python3
 import argparse
 import json
 import logging
 import logging.handlers
+import os
 import sys
 import tempfile
 import traceback
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from acdhQos.backend import *
 from acdhQos.cluster import *
+from acdhQos.redmine_helpers import format_container_description_textile
+from checks import check_acdh_logo, check_helpdesk_email, check_accessibility, check_imprint_page
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at/')
@@ -26,7 +32,7 @@ parser.add_argument('--verbose', action='store_true')
 parser.add_argument('--readOnly', action='store_true', help='Only read data and do not update the backend')
 args = parser.parse_args()
 
-print(f"Skip clusters argument: {args.rancherSkipClusters}")
+logging.debug(f"Skip clusters argument: {args.rancherSkipClusters}")
 
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -40,6 +46,34 @@ lh2 = logging.FileHandler(logPath)
 lh2.setLevel(logging.WARNING)
 lh2.setFormatter(logging.Formatter('#%(levelname)s: %(message)s'))
 logger.addHandler(lh2)
+
+def run_all_checks(endpoint_url: str):
+    """Run all QoS checks against a service endpoint."""
+    return [
+        check_acdh_logo(endpoint_url),
+        check_helpdesk_email(endpoint_url),
+        check_imprint_page(endpoint_url),
+        check_accessibility(endpoint_url),
+    ]
+
+
+def format_checks_for_redmine(checks):
+    """Format check results as a Redmine textile table."""
+    lines = ["|_. Check |_. Status |_. Details |"]
+    for c in checks:
+        status_icon = {
+            "PASS": "✅",
+            "FAIL": "❌",
+            "WARN": "⚠️",
+            "ERROR": "🔧",
+        }.get(c.get("status"), "❓")
+
+        details = c.get("details", "")
+        if c.get("issues"):
+            details += "\n" + "\n".join(f"* {i}" for i in c["issues"])
+
+        lines.append(f"| {c['check']} | {status_icon} {c.get('status', 'UNKNOWN')} | {details} |")
+    return "\n".join(lines)
 
 if not args.readOnly:
     backend = Redmine(args.redmineUrl, (args.redmineUser, args.redminePswd), logIssueId=args.redmineLogIssueId)
@@ -61,18 +95,24 @@ try:
         logging.info('Updating backend with the gathered data')
         for i in data:
             try:
+                if i.get('endpoint'):
+                    checks = run_all_checks(i['endpoint'])
+                    checks_table = format_checks_for_redmine(checks)
+                    logging.info('[%s] QoS checks:\n%s' % (i['server'], checks_table))
+
                 record = backend.findRecord(i)
                 record.update(i)
                 # It doesn't make sense to create backend records for non-existing Portainer and Rancher containers
-                #   as it would require adjusting Portainer and Rancher config (stroring record id in the service metadata). 
-                #   Technically it can be done but as Portainer and Rancher are not reference sources of their services' 
+                #   as it would require adjusting Portainer and Rancher config (storing record id in the service metadata).
+                #   Technically it can be done but as Portainer and Rancher are not reference sources of their services'
                 #   configuration, such a change will be overwritten sooner or later leading to duplication of backend records.
-                # Instead errors log is being passed to backend's `end()` method which allows to review spotted problems
-                #   and fix them at their source.
+                # Instead errors are logged and passed to backend's `end()` method which allows review of spotted problems
+                #   and correction at the source.
             except RecordNotFound:
-                logging.error('[%s] Backend record not found for: %s' % (i['server'], json.dumps(i)))
+                logging.error('[%s] Backend record not found for: %s' % (i['server'], format_container_description_textile(i)))
             except RecordDuplicated as e:
-                logging.error('[%s] Backend record %s duplication between: %s and %s' % (i['server'], str(e.id), json.dumps(e.newData), json.dumps(e.oldData)))
+                logging.error('[%s] Backend record %s duplication between: %s and %s' % (
+                    i['server'], str(e.id), format_container_description_textile(e.newData), format_container_description_textile(e.oldData)))
             except RecordError as e:
                 logging.error('[%s] %s' % (i['server'], str(e)))
     else:

@@ -9,8 +9,18 @@ Purpose
 
 Contents
 - Package: [acdhQos](acdhQos)
+- QoS checks: [checks](checks)
+- Resilient runner: `qos_runner.py`
+- Utility modules: [utils](utils)
 - CLI scripts: [scripts/qos-script-update-redmine](scripts/qos-script-update-redmine), [scripts/qos-script-restore-from-redmine](scripts/qos-script-restore-from-redmine)
 - Packaging: `setup.py`, `requirements.txt`, `Dockerfile`
+
+New resilient design
+- `utils/rate_limiter.py`: token bucket rate limiting for HTTP checks
+- `utils/http_client.py`: async HTTP client with per-host circuit breaker, retries and concurrency control
+- `utils/k8s_client.py`: throttled Kubernetes API client with caching and 429 handling
+- `qos_runner.py`: batch-oriented runner that pre-fetches HTML, performs checks, and formats results for Redmine
+- `checks/imprint_check.py`: verifies found imprint links and optionally checks reachability via http_client
 
 Quick start
 
@@ -32,6 +42,12 @@ Example run (updates Redmine):
 
 ```bash
 python3 scripts/qos-script-update-redmine --rancher --rancherUrl "https://rancher.example/v3" --rancherToken "$RANCHER_TOKEN" --redminePswd "$REDMINE_PSWD"
+```
+
+Alternative run (async resilient checks):
+
+```bash
+python3 qos_runner.py
 ```
 
 Configuration / arguments

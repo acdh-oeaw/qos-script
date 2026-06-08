@@ -1,0 +1,12 @@
+checks:
+  helpdesk_email: "acdh-ch-helpdesk@oeaw.ac.at"
+  logo_patterns:
+    - "acdh-logo"
+    - "acdh_logo"
+    - "acdh-ch-logo"
+    - "acdh.oeaw.ac.at/assets/logo"
+  imprint_keywords:
+    - "imprint"
+    - "impressum"
+    - "legal-notice"
+    - "legal_notice"

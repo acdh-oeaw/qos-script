@@ -2,4 +2,7 @@ requests
 urllib3
 docker
 pyyaml
+beautifulsoup4
+aiohttp
+kubernetes
 setuptools

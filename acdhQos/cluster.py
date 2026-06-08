@@ -57,13 +57,13 @@ class Rancher(ICluster):
                     resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/workloads')
                     workloads = resp.json().get('data', [])
                     logging.info(f"Found {len(workloads)} workloads in project {project['name']}")
-                    print(f"Workloads: {workloads}")
+                    logging.debug("Workloads: %s", workloads)
 
                     # Fetch ingresses for the project
                     ingresses_resp = self.session.get(self.apiBase + '/project/' + project['id'] + '/ingresses')
                     ingresses = ingresses_resp.json().get('data', [])
                     logging.info(f"Found {len(ingresses)} ingresses in project {project['name']}")
-                    print(f"Ingresses: {ingresses}")
+                    logging.debug("Ingresses: %s", ingresses)
 
                     for workload in workloads:
                         if workload['type'] in self.skipTypes:
@@ -74,7 +74,7 @@ class Rancher(ICluster):
                         has_ingress = any(
                             workload['name'] in ingress['name'] for ingress in ingresses
                         )
-                        print(f"Workload {workload['name']} has ingress: {has_ingress}")
+                        logging.debug("Workload %s has ingress: %s", workload['name'], has_ingress)
 
                         if has_ingress:
                             logging.info(f"Processing workload {workload['name']}")
@@ -83,10 +83,8 @@ class Rancher(ICluster):
                             logging.info(f"Skipping workload {workload['name']} (no ingress)")
                 except Exception as e:
                     logging.error(f"Error processing project {project['name']}: {traceback.format_exc()}")
-                    print(f"Error processing project {project['name']}: {e}")
         except Exception as e:
             logging.error(f"Failed to fetch projects: {traceback.format_exc()}")
-            print(f"Error fetching projects: {e}")
         return data if data else []
 
     def processWorkload(self, cfg, pcfg):

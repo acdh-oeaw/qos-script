@@ -1,4 +1,4 @@
-#!python3
+#!/usr/bin/env python3
 
 # A quick & dirty script restoring data from the Redmine issues history.
 # Kept in the repo in case a similar action is needed in the future
