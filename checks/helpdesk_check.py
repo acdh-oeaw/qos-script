@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 
-from checks.config import config
+from config import config
 
 
 def check_helpdesk_email(html: str, expected_email: str = None) -> dict:

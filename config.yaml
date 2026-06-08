@@ -1,5 +1,5 @@
 checks:
-  helpdesk_email: "acdh-ch-helpdesk@oeaw.ac.at"
+  helpdesk_email: "acdh-helpdesk@oeaw.ac.at"
   logo_patterns:
     - "acdh-logo"
     - "acdh_logo"

@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 
-from checks.config import config
+from config import config
 
 
 def check_acdh_logo(html: str, url: str = "") -> dict:
