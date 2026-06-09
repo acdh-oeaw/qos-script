@@ -9,13 +9,17 @@ import os
 import re
 import requests
 import shutil
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from config import config as app_config
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Restore historical service data from Redmine.')
     parser.add_argument('--redminePswd', default=os.getenv('REDMINE_PSWD'), help='Redmine password (defaults to REDMINE_PSWD env var)')
-    parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at', help='Base Redmine URL')
+    parser.add_argument('--redmineUrl', default=None, help='Base Redmine URL (if not provided, uses config.yaml)')
     parser.add_argument('--redmineUser', default='qosScript', help='Redmine username')
     parser.add_argument('--redmineApiKey', default=os.getenv('REDMINE_API_KEY'), help='Redmine API key (REDMINE_API_KEY env var)')
     parser.add_argument('--homeDir', default='/home', help='Root folder containing host config.json files')
@@ -106,6 +110,12 @@ def restore_history(session, base_url, files, all_domains, custom_fields, qos_us
 
 def main():
     args = parse_args()
+    
+    # Use config URL if no command-line URL provided
+    redmine_url = args.redmineUrl or app_config.get("redmine", {}).get("url")
+    if not redmine_url:
+        raise Exception("Redmine URL must be provided either via --redmineUrl or in config.yaml")
+    
     session = requests.Session()
     session.headers.update({'User-Agent': 'ACDH-QoS-Restore/1.0'})
     
@@ -116,9 +126,9 @@ def main():
     else:
         session.auth = (args.redmineUser, args.redminePswd)
 
-    custom_fields = load_custom_fields(session, args.redmineUrl)
+    custom_fields = load_custom_fields(session, redmine_url)
     files, all_domains = read_local_domains(args.homeDir)
-    restore_history(session, args.redmineUrl, files, all_domains, custom_fields, backup_suffix=args.outputSuffix)
+    restore_history(session, redmine_url, files, all_domains, custom_fields, backup_suffix=args.outputSuffix)
 
 
 if __name__ == '__main__':

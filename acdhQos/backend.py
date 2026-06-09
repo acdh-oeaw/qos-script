@@ -268,7 +268,7 @@ class Redmine(IBackend):
             data += urllib.parse.quote(formFields[i], safe='') + '=' + urllib.parse.quote(formValues[i], safe='') + '&'
         resp = self._send(
             'post',
-            'https://redmine.acdh.oeaw.ac.at/settings/edit?tab=notifications',
+            self.baseUrl + '/settings/edit?tab=notifications',
             cookies=resp.cookies,
             data=data,
         )

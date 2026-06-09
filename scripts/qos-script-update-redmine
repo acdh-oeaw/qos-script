@@ -21,7 +21,7 @@ from config import config as app_config
 from utils.http_client import ResilientHttpClient
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--redmineUrl', default='https://redmine.acdh.oeaw.ac.at/')
+parser.add_argument('--redmineUrl', default=None)
 parser.add_argument('--redmineUser', default='qosScript')
 parser.add_argument('--redminePswd', default=os.getenv('REDMINE_PSWD'))
 parser.add_argument('--redmineApiKey', default=os.getenv('REDMINE_API_KEY'), help='Redmine API key for token-based authentication (REDMINE_API_KEY env var)')
@@ -135,10 +135,15 @@ async def main_async(data: List[Dict[str, Any]], backend: Any = None) -> None:
 
 
 if not args.readOnly:
+    # Use config URL if no command-line URL provided
+    redmine_url = args.redmineUrl or app_config.get("redmine", {}).get("url")
+    if not redmine_url:
+        raise Exception("Redmine URL must be provided either via --redmineUrl or in config.yaml")
+    
     # Prefer API key authentication; fall back to Basic Auth if no key is provided
     redmine_auth = (args.redmineUser, args.redminePswd) if (args.redmineUser and args.redminePswd) else None
     backend = Redmine(
-        args.redmineUrl,
+        redmine_url,
         auth=redmine_auth,
         api_key=args.redmineApiKey,
         logIssueId=args.redmineLogIssueId

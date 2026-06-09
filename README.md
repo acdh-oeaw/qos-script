@@ -76,6 +76,7 @@ Configuration is centralized in `config.yaml` and loaded by `config.py`.
   - `batch_delay`: seconds to wait between batches.
 
 - `redmine`
+  - `url`: Redmine base URL (default: `http://redmine.redmine.svc.cluster.local:3000`).
   - `request_interval_seconds`: delay between Redmine backend requests.
 
 ### Environment variable overrides
@@ -120,6 +121,12 @@ Or using Basic Auth as fallback:
 python3 scripts/qos-script-update-redmine --rancher --rancherUrl "https://rancher.example/v3" --rancherToken "$RANCHER_TOKEN" --redminePswd "$REDMINE_PSWD"
 ```
 
+Note: The Redmine URL is read from `config.yaml` by default. To override it via command line:
+
+```bash
+python3 scripts/qos-script-update-redmine --redmineUrl "https://custom-redmine-url" --rancher --rancherUrl "https://rancher.example/v3" --rancherToken "$RANCHER_TOKEN" --redmineApiKey "$REDMINE_API_KEY"
+```
+
 Run in read-only mode:
 
 ```bash
@@ -153,16 +160,22 @@ Authentication priority is: API Key first, then Basic Auth. If an API key is ava
   - Fetches Redmine issue history and restores service aliases and backend connection details.
   - Supports both API key and Basic Auth authentication.
 
-Example with API key:
+Example with API key (uses URL from config.yaml):
 
 ```bash
-python3 scripts/qos-script-restore-from-redmine --redmineUrl https://redmine.acdh.oeaw.ac.at --redmineApiKey "$REDMINE_API_KEY" --homeDir /home
+python3 scripts/qos-script-restore-from-redmine --redmineApiKey "$REDMINE_API_KEY" --homeDir /home
 ```
 
-Example with Basic Auth:
+Example with Basic Auth (uses URL from config.yaml):
 
 ```bash
-python3 scripts/qos-script-restore-from-redmine --redmineUrl https://redmine.acdh.oeaw.ac.at --redmineUser qosScript --redminePswd "$REDMINE_PSWD" --homeDir /home
+python3 scripts/qos-script-restore-from-redmine --redmineUser qosScript --redminePswd "$REDMINE_PSWD" --homeDir /home
+```
+
+Or override the Redmine URL via command line:
+
+```bash
+python3 scripts/qos-script-restore-from-redmine --redmineUrl https://custom-redmine-url --redmineApiKey "$REDMINE_API_KEY" --homeDir /home
 ```
 
 ## Architecture notes

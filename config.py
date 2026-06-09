@@ -39,6 +39,7 @@ DEFAULTS = {
         "dry_run": False,
     },
     "redmine": {
+        "url": "http://redmine.redmine.svc.cluster.local:3000",
         "request_interval_seconds": 1.0,
     },
 }
