@@ -43,7 +43,7 @@ logger = logging.getLogger()
 # file log which will be stored in the `args.redmineLogIssueId` issue description
 (fh, logPath) = tempfile.mkstemp()
 os.close(fh)
-lh2 = logging.FileHandler(logPath)
+lh2 = logging.FileHandler(logPath, encoding='utf-8')
 lh2.setLevel(logging.WARNING)
 lh2.setFormatter(logging.Formatter('#%(levelname)s: %(message)s'))
 logger.addHandler(lh2)
@@ -185,7 +185,7 @@ except Exception:
     logging.error(traceback.format_exc())
 finally:
     if not args.readOnly and backend is not None:
-        with open(logPath) as fd:
+        with open(logPath, encoding='utf-8') as fd:
             backend.end(fd.read(), procServers)
     os.unlink(logPath)
 

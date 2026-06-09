@@ -97,7 +97,10 @@ class ResilientHttpClient:
                 await self.rate_limiter.acquire()
                 try:
                     async with self._session.get(url, ssl=False) as resp:
-                        text = await resp.text()
+                        text = await resp.text(errors='replace')
+                        # Ensure text is properly decoded as UTF-8
+                        if isinstance(text, bytes):
+                            text = text.decode('utf-8', errors='replace')
                         if resp.status >= 400:
                             if resp.status in (429, 500, 502, 503, 504) and attempt < self.max_retries:
                                 wait = int(resp.headers.get("Retry-After", 2 ** attempt))

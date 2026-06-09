@@ -136,7 +136,12 @@ class Redmine(IBackend):
         resp = self._send('get', url)
         if resp is None or resp.status_code != 200:
             raise Exception('Fetching Redmine log issue failed')
-        desc = self.parseRedmineDescription(resp.json()['issue']['description'])
+        # Ensure description is properly decoded as UTF-8 string
+        desc_raw = resp.json()['issue']['description']
+        if isinstance(desc_raw, bytes):
+            desc = self.parseRedmineDescription(desc_raw.decode('utf-8', errors='replace'))
+        else:
+            desc = self.parseRedmineDescription(str(desc_raw))
         log = self.parseLog(log)
         # now every desc and log element is an array of [severity, server, message, data]
 
@@ -164,6 +169,10 @@ class Redmine(IBackend):
                 formatted.append('|'.join(item))
 
         desc = '|Severity|Server|Message|Container Description|\n' + '\n'.join(formatted)
+        # Ensure description is a proper UTF-8 string before sending
+        if isinstance(desc, bytes):
+            desc = desc.decode('utf-8', errors='replace')
+        desc = str(desc)  # Ensure it's a string, not any other type
         data = {'issue': {
             'description': desc,
             'due_date': str(datetime.date.today())
