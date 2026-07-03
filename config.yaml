@@ -14,8 +14,8 @@ checks:
 http:
   requests_per_second: 2.0
   max_concurrent: 5
-  timeout_seconds: 15
-  max_retries: 2
+  timeout_seconds: 30
+  max_retries: 3
 
 k8s:
   requests_per_second: 5.0

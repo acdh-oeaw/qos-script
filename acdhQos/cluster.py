@@ -141,7 +141,7 @@ class Rancher(ICluster):
                 username = re.sub('.*CN=([^,]*),OU=.*', '\\1', user['userPrincipalId'].replace('\\,', ''))
                 users_detailed.append(username + ' (' + user['userId'] + '): ' + user['roleTemplateId'])
                 users_names.append(username)
-        users = '\n'.join(set(users_detailed))
+        users = '\n'.join(sorted(set(users_detailed)))
         users_short = ', '.join(sorted(set(users_names)))
 
         return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'users_short': users_short, 'server': server, 'project': pcfg['name'], 'type': type, 'namespace': namespace}

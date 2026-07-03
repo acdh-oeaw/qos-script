@@ -141,7 +141,8 @@ async def main_async(data: List[Dict[str, Any]], backend: Any = None) -> dict:
 
                 if not args.readOnly and backend is not None:
                     record = backend.findRecord(i)
-                    record.update(i)
+                    update_data = {k: v for k, v in i.items() if k not in ('users_short', 'namespace')}
+                    record.update(update_data)
 
             except RecordNotFound:
                 missing_id_entries.append({
