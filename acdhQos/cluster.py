@@ -111,6 +111,7 @@ class Rancher(ICluster):
     def processWorkload(self, cfg, pcfg):
         name = cfg['name']
         type = cfg['type']
+        namespace = cfg.get('namespaceId', '').split(':')[-1] if cfg.get('namespaceId') else ''
         server = self.clusters[pcfg['clusterId']]
 
         redmineId = self.getLabel(cfg, 'ID')
@@ -131,16 +132,19 @@ class Rancher(ICluster):
 
         backendConnection = self.getAnnotation(cfg, 'BackendConnection')
 
-        users = []
+        users_detailed = []
+        users_names = []
         resp = self.session.get(f'{self.base_url}/project/{pcfg["id"]}/projectRoleTemplateBindings', timeout=30)
         resp.raise_for_status()
         for user in resp.json()['data']:
             if user.get('userPrincipalId') is not None:
                 username = re.sub('.*CN=([^,]*),OU=.*', '\\1', user['userPrincipalId'].replace('\\,', ''))
-                users.append(username + ' (' + user['userId'] + '): ' + user['roleTemplateId'])
-        users = '\n'.join(set(users))
+                users_detailed.append(username + ' (' + user['userId'] + '): ' + user['roleTemplateId'])
+                users_names.append(username)
+        users = '\n'.join(set(users_detailed))
+        users_short = ', '.join(sorted(set(users_names)))
 
-        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'server': server, 'project': pcfg['name'], 'type': type}
+        return {'name': name, 'id': redmineId, 'endpoint': endpoint, 'techStack': techStack, 'inContainerApps': inContainerApps, 'backendConnection': backendConnection, 'users': users, 'users_short': users_short, 'server': server, 'project': pcfg['name'], 'type': type, 'namespace': namespace}
 
     def getLabel(self, cfg, name):
         if 'labels' not in cfg or name not in cfg['labels']:

@@ -125,10 +125,13 @@ class Redmine(IBackend):
     def begin(self):
         self.setupNotifications(False)
         
-    def end(self, log, procServers):
+    def end(self, log, procServers, report=None):
         self.setupNotifications(True)
         if self.logIssueId is not None:
-            self.saveLog(log, procServers)
+            if report:
+                self.saveStructuredReport(report)
+            else:
+                self.saveLog(log, procServers)
 
     def _sanitize_cell(self, value):
         """Remove characters that break Textile table formatting."""
@@ -245,6 +248,126 @@ class Redmine(IBackend):
         resp = self._send('put', url, json=data)
         if resp is None or (resp.status_code != 200 and resp.status_code != 204):
             logging.error('Log issue update failed: %s', resp.text if resp else 'No response')
+
+    def saveStructuredReport(self, report):
+        """Save structured QoS report to Redmine log issue."""
+        desc = ''
+
+        # Section 1: Missing Redmine ID
+        missing = report.get('missing_id', [])
+        if missing:
+            desc += 'h2. Missing Redmine ID\n\n'
+            desc += '|Project|Users|Namespace|Deployment|Endpoint|\n'
+            for m in missing:
+                desc += '|%s|%s|%s|%s|%s|\n' % (
+                    self._sanitize_cell(m.get('project', '')),
+                    self._sanitize_cell(m.get('users_short', '')),
+                    self._sanitize_cell(m.get('namespace', '')),
+                    self._sanitize_cell(m.get('name', '')),
+                    self._sanitize_cell(m.get('endpoint', '')),
+                )
+
+        # Section 2: Duplicate Redmine ID
+        dupes = report.get('duplicates', [])
+        if dupes:
+            desc += '\nh2. Duplicate Redmine ID\n\n'
+            desc += '|Redmine #|Project|Users|Namespace|Deployment 1|Deployment 2|\n'
+            for d in dupes:
+                desc += '|%s|%s|%s|%s|%s|%s|\n' % (
+                    self._sanitize_cell(d.get('redmine_id', '')),
+                    self._sanitize_cell(d.get('project', '')),
+                    self._sanitize_cell(d.get('users_short', '')),
+                    self._sanitize_cell(d.get('namespace_1', '')),
+                    self._sanitize_cell(d.get('name_1', '')),
+                    self._sanitize_cell(d.get('name_2', '')),
+                )
+
+        # Section 3: QoS Checks (only services with at least one non-PASS check)
+        qos = report.get('qos', [])
+        if qos:
+            qos_with_issues = [q for q in qos if any(
+                c.get('status', '') in ('FAIL', 'WARN', 'SKIP') for c in q.get('checks', [])
+            )]
+            if qos_with_issues:
+                desc += '\nh2. QoS Checks\n\n'
+                desc += '|Redmine #|Service|Domain|Type|Reachable|Logo|Helpdesk|Imprint|Accessibility|\n'
+                for q in qos_with_issues:
+                    checks = q.get('checks', [])
+                    checks_map = {c['check']: c for c in checks}
+
+                    def icon(check_name):
+                        if check_name not in checks_map:
+                            return ' - '
+                        s = checks_map[check_name].get('status', '')
+                        d = checks_map[check_name].get('details', '')
+                        if s == 'PASS':
+                            return '!/images/true.png!'
+                        elif s == 'FAIL':
+                            return '!/images/false.png!'
+                        elif s == 'WARN':
+                            return '!/images/warning.png! ' + self._sanitize_cell(d)[:50]
+                        elif s == 'SKIP':
+                            return 'SKIP'
+                        return ' - '
+
+                    def reachable_icon():
+                        r = checks_map.get('Reachability', {})
+                        s = r.get('status', '')
+                        d = r.get('details', '')
+                        if s == 'PASS':
+                            return '!/images/true.png!'
+                        elif s == 'FAIL':
+                            return '!/images/false.png! ' + self._sanitize_cell(d)[:30]
+                        elif s == 'SKIP':
+                            return 'SKIP ' + self._sanitize_cell(d)[:30]
+                        return ' - '
+
+                    stype = q.get('service_type', 'Unknown')
+                    endpoint = q.get('endpoint', '')
+                    domain = endpoint.replace('https://', '').replace('http://', '').split('/')[0].split('\n')[0] if endpoint else ''
+
+                    if stype == 'Backend':
+                        row = '|%s|%s|%s|Backend|%s| - | - | - | - |' % (
+                            self._sanitize_cell(q.get('redmine_id', '')),
+                            self._sanitize_cell(q.get('name', '')),
+                            self._sanitize_cell(domain),
+                            reachable_icon(),
+                        )
+                    else:
+                        row = '|%s|%s|%s|%s|%s|%s|%s|%s|%s|' % (
+                            self._sanitize_cell(q.get('redmine_id', '')),
+                            self._sanitize_cell(q.get('name', '')),
+                            self._sanitize_cell(domain),
+                            stype,
+                            reachable_icon(),
+                            icon('ACDH Logo'),
+                            icon('Helpdesk Email'),
+                            icon('Imprint Page'),
+                            icon('Accessibility'),
+                        )
+                    desc += row + '\n'
+
+        # Section 4: Other Issues (filtered from noise)
+        others = report.get('other_errors', [])
+        noise_patterns = ['circuit breaker', '(attempt ', 'transient http', 'timeout for',
+                          'client error for', 'name or service not known', 'max_retries']
+        others = [o for o in others if not any(p in o.lower() for p in noise_patterns)]
+        if others:
+            desc += '\nh2. Other Issues\n\n'
+            desc += '|Message|\n'
+            for o in others:
+                desc += '|%s|\n' % self._sanitize_cell(o)[:200]
+
+        if not desc:
+            desc = 'No issues found.'
+
+        data = {'issue': {'description': desc}}
+        resp = self.session.put(
+            '%s/issues/%d.json' % (self.baseUrl, self.logIssueId),
+            json=data
+        )
+        if resp.status_code not in (200, 204):
+            logging.error('Log issue update failed: %d %s', resp.status_code, resp.text)
 
     def parseLog(self, log):
         log = log.strip()[1:].split('\n#')
