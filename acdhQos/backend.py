@@ -149,24 +149,28 @@ class Redmine(IBackend):
         # the servers processed in the new log and adding a complete new log to it
         desc = [i for i in desc if len(i) < 2 or (i[1] not in procServers and i[1] != '')]
         desc += log
-        desc = ['|' + '|'.join(i) + '|' if len(i) == 4 else '' for i in desc]
-        desc = list(set(desc)) # to avoid duplication of lines without the server
+        # Filter and deduplicate: keep only items with 4 elements (severity, server, message, data)
+        desc = [tuple(i) if len(i) == 4 else None for i in desc]
+        desc = [i for i in desc if i is not None]
+        desc = list(set(desc))  # to avoid duplication of lines without the server
         desc.sort()
 
         # update the redmine issue
         formatted = []
         for item in desc:
-            if len(item) == 4:
-                severity, server, message, data_field = item
-                if isinstance(data_field, str) and data_field.strip().startswith('{') and data_field.strip().endswith('}'):
-                    try:
-                        container_info = json.loads(data_field)
-                        data_field = format_container_description_textile(container_info)
-                    except Exception:
-                        pass
-                formatted.append('|'.join([severity, server, message, data_field]))
-            else:
-                formatted.append('|'.join(item))
+            # item is now a tuple/list of (severity, server, message, data_field)
+            severity, server, message, data_field = item
+            if isinstance(data_field, str) and data_field.strip().startswith('{') and data_field.strip().endswith('}'):
+                try:
+                    container_info = json.loads(data_field)
+                    data_field = format_container_description_textile(container_info)
+                except Exception:
+                    pass
+            # Build the table row: join the 4 columns with pipes
+            row = '|'.join([severity, server, message, data_field])
+            formatted.append(row)
+            # Log the row for debugging to verify correct formatting
+            logging.debug(f'Table row: |{row}|')
 
         desc = '|Severity|Server|Message|Container Description|\n' + '\n'.join(formatted)
         # Ensure description is a proper UTF-8 string before sending
