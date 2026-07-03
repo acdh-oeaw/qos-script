@@ -176,7 +176,7 @@ class Redmine(IBackend):
                 except Exception:
                     pass
             # Build the table row: sanitize each cell and join with pipes
-            row = '|'.join([self._sanitize_cell(x) for x in [severity, server, message, data_field]])
+            row = '|' + '|'.join([self._sanitize_cell(x) for x in [severity, server, message, data_field]]) + '|'
             formatted.append(row)
             # Log the row for debugging to verify correct formatting
             logging.debug(f'Table row: |{row}|')
