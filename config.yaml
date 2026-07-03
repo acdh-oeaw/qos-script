@@ -25,5 +25,5 @@ runner:
   batch_delay: 2.0
 
 redmine:
-  url: "http://redmine.redmine.svc.cluster.local:3000"
+  url: "http://redmine-prod.redmine.svc.cluster.local:3000"
   request_interval_seconds: 1.0
