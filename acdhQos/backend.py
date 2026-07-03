@@ -130,6 +130,15 @@ class Redmine(IBackend):
         if self.logIssueId is not None:
             self.saveLog(log, procServers)
 
+    def _sanitize_cell(self, value):
+        """Remove characters that break Textile table formatting."""
+        if not isinstance(value, str):
+            value = str(value)
+        value = value.replace("|", "/")
+        value = value.replace("\n", " ")
+        value = value.replace("\r", "")
+        return value.strip()
+
     def saveLog(self, log, procServers):
         # get the current log and split it into entries - we must combine it with the new one
         url = '%s/issues/%s.json' % (self.baseUrl, str(self.logIssueId))
@@ -166,8 +175,8 @@ class Redmine(IBackend):
                     data_field = format_container_description_textile(container_info)
                 except Exception:
                     pass
-            # Build the table row: join the 4 columns with pipes
-            row = '|'.join([severity, server, message, data_field])
+            # Build the table row: sanitize each cell and join with pipes
+            row = '|'.join([self._sanitize_cell(x) for x in [severity, server, message, data_field]])
             formatted.append(row)
             # Log the row for debugging to verify correct formatting
             logging.debug(f'Table row: |{row}|')
