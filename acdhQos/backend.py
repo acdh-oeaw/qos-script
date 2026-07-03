@@ -142,60 +142,109 @@ class Redmine(IBackend):
             value = value[:200] + "..."
         return value
 
+    def _extract_field(self, text, field_name):
+        """Extract a field value from formatted text like '* Name: value'."""
+        match = re.search(rf'\*?{field_name}:\*?\s*(\S+)', text)
+        return match.group(1) if match else None
+
     def saveLog(self, log, procServers):
-        # get the current log and split it into entries - we must combine it with the new one
-        url = '%s/issues/%s.json' % (self.baseUrl, str(self.logIssueId))
-        resp = self._send('get', url)
-        if resp is None or resp.status_code != 200:
-            raise Exception('Fetching Redmine log issue failed')
-        # Ensure description is properly decoded as UTF-8 string
-        desc_raw = resp.json()['issue']['description']
-        if isinstance(desc_raw, bytes):
-            desc = self.parseRedmineDescription(desc_raw.decode('utf-8', errors='replace'))
-        else:
-            desc = self.parseRedmineDescription(str(desc_raw))
+        """Save structured QoS report to Redmine log issue."""
+        if self.logIssueId is None:
+            return
+        
         log = self.parseLog(log)
-        # now every desc and log element is an array of [severity, server, message, data]
-
-        # combine logs by keeping all lines from the old ones which do not apply to
-        # the servers processed in the new log and adding a complete new log to it
-        desc = [i for i in desc if len(i) < 2 or (i[1] not in procServers and i[1] != '')]
-        desc += log
-        # Filter and deduplicate: keep only items with 4 elements (severity, server, message, data)
-        desc = [tuple(i) if len(i) == 4 else None for i in desc]
-        desc = [i for i in desc if i is not None]
-        desc = list(set(desc))  # to avoid duplication of lines without the server
-        desc.sort()
-
-        # update the redmine issue
-        formatted = []
-        for item in desc:
-            # item is now a tuple/list of (severity, server, message, data_field)
-            severity, server, message, data_field = item
-            if isinstance(data_field, str) and data_field.strip().startswith('{') and data_field.strip().endswith('}'):
-                try:
-                    container_info = json.loads(data_field)
-                    data_field = format_container_description_textile(container_info)
-                except Exception:
-                    pass
-            # Build the table row: sanitize each cell and join with pipes
-            row = '|' + '|'.join([self._sanitize_cell(x) for x in [severity, server, message, data_field]]) + '|'
-            formatted.append(row)
-            # Log the row for debugging to verify correct formatting
-            logging.debug(f'Table row: |{row}|')
-
-        desc = '|Severity|Server|Message|Container Description|\n' + '\n'.join(formatted)
-        # Ensure description is a proper UTF-8 string before sending
-        if isinstance(desc, bytes):
-            desc = desc.decode('utf-8', errors='replace')
-        desc = str(desc)  # Ensure it's a string, not any other type
+        
+        # Categorize log entries by type
+        missing_id = []      # services without Redmine ID
+        duplicates = []      # duplicate Redmine IDs
+        qos_results = []     # QoS check results
+        other_errors = []    # uncategorized errors
+        
+        for entry in log:
+            if len(entry) < 3:
+                continue
+            severity = entry[0] if len(entry) > 0 else ''
+            server = entry[1] if len(entry) > 1 else ''
+            message = entry[2] if len(entry) > 2 else ''
+            
+            if 'not found' in message.lower() and 'backend record' in message.lower():
+                missing_id.append(entry)
+            elif 'duplication' in message.lower():
+                duplicates.append(entry)
+            elif any(check in message for check in ['ACDH Logo', 'Helpdesk', 'Imprint', 'Reachability', 'Accessibility']):
+                qos_results.append(entry)
+            else:
+                other_errors.append(entry)
+        
+        desc = ''
+        
+        # Section 1: Missing Redmine ID
+        if missing_id:
+            desc += 'h2. Missing Redmine ID\n\n'
+            desc += '|Severity|Namespace|Deployment|Message|\n'
+            for entry in missing_id:
+                msg = self._sanitize_cell(entry[2]) if len(entry) > 2 else ''
+                # Extract namespace and deployment from message
+                namespace = self._extract_field(msg, 'Namespace') or ''
+                deployment = self._extract_field(msg, 'Name') or msg[:100]
+                desc += '|' + '|'.join([
+                    self._sanitize_cell(entry[0]),
+                    namespace,
+                    deployment,
+                    msg[:150]
+                ]) + '|\n'
+        
+        # Section 2: Duplicates
+        if duplicates:
+            desc += '\nh2. Duplicate Redmine ID\n\n'
+            desc += '|Redmine #|Details|\n'
+            for entry in duplicates:
+                msg = self._sanitize_cell(entry[2]) if len(entry) > 2 else ''
+                # Extract Redmine issue number from message
+                match = re.search(r'record (\d+)', msg)
+                issue_num = match.group(1) if match else '?'
+                desc += '|' + issue_num + '|' + msg[:200] + '|\n'
+        
+        # Section 3: QoS Checks
+        if qos_results:
+            desc += '\nh2. QoS Checks\n\n'
+            desc += '|Service|Check|Status|Details|\n'
+            for entry in qos_results:
+                msg = self._sanitize_cell(entry[2]) if len(entry) > 2 else ''
+                # Parse "app_name - Check: details"
+                parts = msg.split(' - ', 1)
+                service = parts[0] if len(parts) > 1 else ''
+                check_info = parts[1] if len(parts) > 1 else msg
+                check_parts = check_info.split(': ', 1)
+                check_name = check_parts[0] if len(check_parts) > 0 else ''
+                details = check_parts[1] if len(check_parts) > 1 else ''
+                desc += '|' + '|'.join([
+                    service[:50],
+                    check_name[:50],
+                    self._sanitize_cell(entry[0]),
+                    details[:150]
+                ]) + '|\n'
+        
+        # Section 4: Other errors
+        if other_errors:
+            desc += '\nh2. Other Issues\n\n'
+            desc += '|Severity|Message|\n'
+            for entry in other_errors:
+                msg = self._sanitize_cell(entry[2]) if len(entry) > 2 else ''
+                desc += '|' + self._sanitize_cell(entry[0]) + '|' + msg[:200] + '|\n'
+        
+        if not desc:
+            desc = 'No issues found.'
+        
+        desc = str(desc)
         data = {'issue': {
             'description': desc,
             'due_date': str(datetime.date.today())
         }}
+        url = '%s/issues/%s.json' % (self.baseUrl, str(self.logIssueId))
         resp = self._send('put', url, json=data)
         if resp is None or (resp.status_code != 200 and resp.status_code != 204):
-            raise Exception('Updating Redmine log issue failed')
+            logging.error('Log issue update failed: %s', resp.text if resp else 'No response')
 
     def parseLog(self, log):
         log = log.strip()[1:].split('\n#')

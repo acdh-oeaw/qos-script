@@ -17,6 +17,7 @@ from acdhQos.backend import *
 from acdhQos.cluster import *
 from acdhQos.redmine_helpers import format_container_description_textile
 from checks import check_acdh_logo, check_helpdesk_email, check_accessibility, check_imprint_page
+from checks.detect_type import detect_service_type
 from config import config as app_config
 from utils.http_client import ResilientHttpClient
 
@@ -68,27 +69,41 @@ def format_checks_for_redmine(checks: List[Dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-async def run_all_checks(endpoint_url: str, http_client: ResilientHttpClient) -> List[Dict[str, Any]]:
+async def run_all_checks(endpoint_url: str, http_client: ResilientHttpClient) -> tuple:
+    """Run all checks and return (service_type, check_results)."""
     response = await http_client.get(endpoint_url)
+    status = response.get('status', 0)
+    html = response.get('text', '')
+    
+    # Detect service type (Frontend, Backend, or Unknown)
+    service_type = detect_service_type(endpoint_url, html, status)
 
     if response["skipped"]:
-        return [{
+        return service_type, [{
             "check": "All",
             "status": "SKIP",
             "details": f"Skipped: {response['error']}",
         }]
 
-    if response["error"] or response["status"] >= 400:
-        error_detail = response["error"] or f"HTTP {response['status']}"
-        return [{
+    if response["error"] or status >= 400:
+        error_detail = response["error"] or f"HTTP {status}"
+        return service_type, [{
             "check": "Reachability",
             "status": "FAIL",
             "details": error_detail,
         }]
 
-    html = response["text"]
+    # For Backend services, only check Reachability
+    if service_type == 'Backend':
+        return service_type, [{
+            "check": "Reachability",
+            "status": "PASS",
+            "details": f"HTTP {status}",
+        }]
 
-    return [
+    # For Frontend services, run full checks
+    return service_type, [
+        {"check": "Reachability", "status": "PASS", "details": f"HTTP {status}"},
         check_acdh_logo(html=html, url=endpoint_url),
         check_helpdesk_email(html=html),
         await check_imprint_page(html=html, url=endpoint_url, http_client=http_client),
@@ -109,20 +124,32 @@ async def main_async(data: List[Dict[str, Any]], backend: Any = None) -> None:
         for i in data:
             try:
                 checks: List[Dict[str, Any]] = []
+                service_type = 'Unknown'
                 if i.get('endpoint'):
-                    checks = await run_all_checks(i['endpoint'], http_client)
+                    service_type, checks = await run_all_checks(i['endpoint'], http_client)
                     checks_table = format_checks_for_redmine(checks)
                     logging.info('[%s] QoS checks:\n%s', i.get('server'), checks_table)
                     
+                    app_name = i.get('name', i.get('endpoint', 'unknown'))
                     for c in checks:
                         status = c.get('status', 'UNKNOWN')
-                        if status != 'PASS':
-                            severity = 'WARNING' if status == 'WARN' else 'ERROR'
-                            logging.error('[%s] %s: %s - %s', 
-                                i.get('server'), 
+                        if status == 'FAIL':
+                            logging.error('[%s] %s - %s: %s', 
+                                i.get('server'),
+                                app_name,
                                 c.get('check', ''),
-                                status,
                                 c.get('details', ''))
+                        elif status in ('WARN', 'SKIP'):
+                            logging.warning('[%s] %s - %s: %s',
+                                i.get('server'),
+                                app_name,
+                                c.get('check', ''),
+                                c.get('details', ''))
+                    
+                    if service_type == 'Backend':
+                        logging.info('[%s] %s is a Backend service at %s (ns: %s)',
+                            i.get('server'), app_name, 
+                            i.get('endpoint'), i.get('namespace', ''))
 
                 if not args.readOnly and backend is not None:
                     record = backend.findRecord(i)
