@@ -137,7 +137,10 @@ class Redmine(IBackend):
         value = value.replace("|", "/")
         value = value.replace("\n", " ")
         value = value.replace("\r", "")
-        return value.strip()
+        value = value.strip()
+        if len(value) > 200:
+            value = value[:200] + "..."
+        return value
 
     def saveLog(self, log, procServers):
         # get the current log and split it into entries - we must combine it with the new one

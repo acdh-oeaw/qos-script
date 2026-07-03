@@ -113,6 +113,16 @@ async def main_async(data: List[Dict[str, Any]], backend: Any = None) -> None:
                     checks = await run_all_checks(i['endpoint'], http_client)
                     checks_table = format_checks_for_redmine(checks)
                     logging.info('[%s] QoS checks:\n%s', i.get('server'), checks_table)
+                    
+                    for c in checks:
+                        status = c.get('status', 'UNKNOWN')
+                        if status != 'PASS':
+                            severity = 'WARNING' if status == 'WARN' else 'ERROR'
+                            logging.error('[%s] %s: %s - %s', 
+                                i.get('server'), 
+                                c.get('check', ''),
+                                status,
+                                c.get('details', ''))
 
                 if not args.readOnly and backend is not None:
                     record = backend.findRecord(i)
