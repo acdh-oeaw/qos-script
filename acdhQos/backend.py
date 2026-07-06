@@ -271,7 +271,7 @@ class Redmine(IBackend):
         dupes = report.get('duplicates', [])
         if dupes:
             desc += '\nh2. Duplicate Redmine ID\n\n'
-            desc += '|Redmine #|Project|Users|Namespace|Deployment 1|Deployment 2|\n'
+            desc += '|Redmine ID|Project|Users|Namespace|Deployment 1|Deployment 2|\n'
             for d in dupes:
                 desc += '|%s|%s|%s|%s|%s|%s|\n' % (
                     self._sanitize_cell(d.get('redmine_id', '')),
@@ -290,7 +290,7 @@ class Redmine(IBackend):
             )]
             if qos_with_issues:
                 desc += '\nh2. QoS Checks\n\n'
-                desc += '|Redmine #|Service|Domain|Type|Reachable|Logo|Helpdesk|Imprint|Accessibility|\n'
+                desc += '|Redmine ID|Service|Domain|Type|Reachable|Logo|Helpdesk|Imprint|Accessibility|\n'
                 for q in qos_with_issues:
                     checks = q.get('checks', [])
                     checks_map = {c['check']: c for c in checks}
