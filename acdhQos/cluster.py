@@ -146,6 +146,9 @@ class Rancher(ICluster):
                 if cleaned_hostname.endswith('acdh-cluster-2.arz.oeaw.ac.at'):
                     endpoint_domains.append(cleaned_hostname)
                     continue
+                if '-main' in cleaned_hostname or '-default' in cleaned_hostname:
+                    endpoint_domains.append(cleaned_hostname)
+                    continue
                 endpoint.append(i['protocol'].lower() + '://' + cleaned_hostname)
                 endpoint_domains.append(cleaned_hostname)
 
