@@ -140,6 +140,9 @@ class Rancher(ICluster):
 
             for hostname in hostnames:
                 cleaned_hostname = hostname.split(':')[0].strip().lower()
+                if cleaned_hostname.startswith('le-'):
+                    endpoint_domains.append(cleaned_hostname)
+                    continue
                 if cleaned_hostname.endswith('acdh-cluster-2.arz.oeaw.ac.at'):
                     endpoint_domains.append(cleaned_hostname)
                     continue
