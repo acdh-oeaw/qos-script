@@ -166,10 +166,16 @@ class Rancher(ICluster):
         resp = self.session.get(f'{self.base_url}/project/{pcfg["id"]}/projectRoleTemplateBindings', timeout=30)
         resp.raise_for_status()
         for user in resp.json()['data']:
-            if user.get('userPrincipalId') is not None:
-                username = re.sub('.*CN=([^,]*),OU=.*', '\\1', user['userPrincipalId'].replace('\\,', ''))
-                users_detailed.append(username + ' (' + user['userId'] + '): ' + user['roleTemplateId'])
-                users_names.append(username)
+            user_principal_id = user.get('userPrincipalId')
+            if not user_principal_id or str(user_principal_id).startswith('local://'):
+                continue
+
+            username = re.sub('.*CN=([^,]*),OU=.*', '\\1', user_principal_id.replace('\\,', ''))
+            if not username:
+                continue
+
+            users_detailed.append(username + ' (' + user['userId'] + '): ' + user['roleTemplateId'])
+            users_names.append(username)
         users = '\n'.join(sorted(set(users_detailed)))
         users_short = ', '.join(sorted(set(users_names)))
 
