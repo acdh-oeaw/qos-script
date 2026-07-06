@@ -99,7 +99,7 @@ class Rancher(ICluster):
 
                         if has_ingress:
                             logging.info(f"Processing workload {workload['name']}")
-                            data.append(self.processWorkload(workload, project))
+                            data.append(self.processWorkload(workload, project, ingresses))
                         else:
                             logging.info(f"Skipping workload {workload['name']} (no ingress)")
                 except Exception as e:
@@ -108,7 +108,7 @@ class Rancher(ICluster):
             logging.error(f"Failed to fetch projects: {traceback.format_exc()}")
         return data if data else []
 
-    def processWorkload(self, cfg, pcfg):
+    def processWorkload(self, cfg, pcfg, ingresses=None):
         name = cfg['name']
         type = cfg['type']
         namespace = cfg.get('namespaceId', '').split(':')[-1] if cfg.get('namespaceId') else ''
@@ -119,6 +119,12 @@ class Rancher(ICluster):
             return None
 
         redmineId = self.getLabel(cfg, 'ID')
+        if not redmineId and ingresses:
+            for ingress in ingresses:
+                if name in ingress.get('name', ''):
+                    redmineId = self.getLabel(ingress, 'ID')
+                    if redmineId:
+                        break
 
         images = [i['image'] for i in cfg['containers']]
         images = '\n'.join(set(images))
