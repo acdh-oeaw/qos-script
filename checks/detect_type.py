@@ -10,9 +10,9 @@ def detect_service_type(url: str, html: str = "", status_code: int = 0) -> str:
         if p in url_lower:
             return 'Backend'
     
-    # If not reachable, unknown
+    # If not reachable, we cannot determine the type reliably
     if status_code == 0 or status_code >= 400:
-        return 'Unknown'
+        return 'N/A'
     
     # If HTML response contains typical frontend elements
     if html:

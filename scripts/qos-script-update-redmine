@@ -86,7 +86,11 @@ async def run_all_checks(endpoint_url: str, http_client: ResilientHttpClient) ->
         }]
 
     if response["error"] or status >= 400:
-        error_detail = response["error"] or f"HTTP {status}"
+        if response.get("error") in ("max_retries_exceeded", "circuit_breaker_open"):
+            service_type = 'N/A'
+            error_detail = "Service unreachable (timeout after retries)"
+        else:
+            error_detail = response["error"] or f"HTTP {status}"
         return service_type, [{
             "check": "Reachability",
             "status": "FAIL",

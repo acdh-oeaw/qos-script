@@ -307,6 +307,8 @@ class Redmine(IBackend):
                         elif s == 'WARN':
                             details = self._sanitize_cell(d)
                             if details:
+                                if 'max_retries_exceeded' in details.lower() or 'circuit_breaker_open' in details.lower():
+                                    return '⚠️ Unreachable'
                                 return '!/images/warning.png! ' + details[:120]
                             return '!/images/warning.png!'
                         elif s == 'SKIP':
