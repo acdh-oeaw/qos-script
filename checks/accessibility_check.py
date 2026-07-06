@@ -41,7 +41,7 @@ def check_accessibility(html: str, url: str = "") -> dict:
         if issues:
             result["status"] = "WARN" if len(issues) <= 2 else "FAIL"
             result["issues"] = issues
-            result["details"] = f"{len(issues)} issue(s) found"
+            result["details"] = "; ".join(issues)
         else:
             result["details"] = "Basic checks passed"
 

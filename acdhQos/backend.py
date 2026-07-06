@@ -305,7 +305,10 @@ class Redmine(IBackend):
                         elif s == 'FAIL':
                             return '!/images/false.png!'
                         elif s == 'WARN':
-                            return '!/images/warning.png! ' + self._sanitize_cell(d)[:50]
+                            details = self._sanitize_cell(d)
+                            if details:
+                                return '!/images/warning.png! ' + details[:120]
+                            return '!/images/warning.png!'
                         elif s == 'SKIP':
                             return 'SKIP'
                         return ' - '
