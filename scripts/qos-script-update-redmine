@@ -126,6 +126,9 @@ async def main_async(data: List[Dict[str, Any]], backend: Any = None) -> dict:
     ) as http_client:
         for i in data:
             try:
+                if i is None:
+                    continue
+
                 if i.get('endpoint'):
                     service_type, checks = await run_all_checks(i['endpoint'], http_client)
                     qos_entries.append({

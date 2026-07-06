@@ -114,6 +114,10 @@ class Rancher(ICluster):
         namespace = cfg.get('namespaceId', '').split(':')[-1] if cfg.get('namespaceId') else ''
         server = self.clusters[pcfg['clusterId']]
 
+        if name and name.lower() == 'service':
+            logging.info(f"Skipping workload {name} because it is a helper/service deployment")
+            return None
+
         redmineId = self.getLabel(cfg, 'ID')
 
         images = [i['image'] for i in cfg['containers']]
@@ -125,6 +129,10 @@ class Rancher(ICluster):
                 continue
             endpoint.append(i['protocol'].lower() + '://' + (i['hostname'] if 'hostname' in i else ', '.join(i['addresses'])))
         endpoint = '\n'.join(set(endpoint))
+
+        if not endpoint:
+            logging.info(f"Skipping workload {name} because it has no ingress/endpoint")
+            return None
 
         techStack = '\n'.join([i['image'] for i in cfg['containers']])
 
