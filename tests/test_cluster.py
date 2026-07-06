@@ -64,6 +64,30 @@ class ProcessWorkloadTests(unittest.TestCase):
         self.assertEqual(result['name'], 'demo')
         self.assertEqual(result['endpoint'], 'https://example.com')
 
+    def test_skips_deployments_when_all_domains_are_internal_cluster_domains(self):
+        cfg = self.make_cfg(
+            name='demo',
+            publicEndpoints=[{'protocol': 'https', 'hostname': 'demo.acdh-cluster-2.arz.oeaw.ac.at'}],
+        )
+
+        result = self.rancher.processWorkload(cfg, {'id': 'proj-1', 'name': 'Project', 'clusterId': 'cluster-id'})
+
+        self.assertIsNone(result)
+
+    def test_keeps_deployment_and_filters_to_public_domains_when_mixed(self):
+        cfg = self.make_cfg(
+            name='demo',
+            publicEndpoints=[
+                {'protocol': 'https', 'hostname': 'demo.acdh-cluster-2.arz.oeaw.ac.at'},
+                {'protocol': 'https', 'hostname': 'demo.acdh-dev.oeaw.ac.at'},
+            ],
+        )
+
+        result = self.rancher.processWorkload(cfg, {'id': 'proj-1', 'name': 'Project', 'clusterId': 'cluster-id'})
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result['endpoint'], 'https://demo.acdh-dev.oeaw.ac.at')
+
 
 if __name__ == '__main__':
     unittest.main()

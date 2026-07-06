@@ -124,13 +124,34 @@ class Rancher(ICluster):
         images = '\n'.join(set(images))
 
         endpoint = []
+        endpoint_domains = []
         for i in cfg['publicEndpoints'] if 'publicEndpoints' in cfg and cfg['publicEndpoints'] is not None else []:
             if 'addresses' not in i and 'hostname' not in i:
                 continue
-            endpoint.append(i['protocol'].lower() + '://' + (i['hostname'] if 'hostname' in i else ', '.join(i['addresses'])))
+
+            hostnames = []
+            if 'hostname' in i:
+                hostnames = [i['hostname']]
+            elif 'addresses' in i:
+                hostnames = i['addresses']
+
+            if not hostnames:
+                continue
+
+            for hostname in hostnames:
+                cleaned_hostname = hostname.split(':')[0].strip().lower()
+                if cleaned_hostname.endswith('acdh-cluster-2.arz.oeaw.ac.at'):
+                    endpoint_domains.append(cleaned_hostname)
+                    continue
+                endpoint.append(i['protocol'].lower() + '://' + cleaned_hostname)
+                endpoint_domains.append(cleaned_hostname)
+
         endpoint = '\n'.join(set(endpoint))
 
         if not endpoint:
+            if endpoint_domains and all(domain.endswith('acdh-cluster-2.arz.oeaw.ac.at') for domain in endpoint_domains):
+                logging.info(f"Skipping workload {name} because all ingress domains are internal cluster domains")
+                return None
             logging.info(f"Skipping workload {name} because it has no ingress/endpoint")
             return None
 
