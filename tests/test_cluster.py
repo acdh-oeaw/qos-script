@@ -74,17 +74,7 @@ class ProcessWorkloadTests(unittest.TestCase):
 
         self.assertIsNone(result)
 
-    def test_skips_development_domains_containing_dev_acdh(self):
-        cfg = self.make_cfg(
-            name='demo',
-            publicEndpoints=[{'protocol': 'https', 'hostname': 'demo-dev.acdh.oeaw.ac.at'}],
-        )
-
-        result = self.rancher.processWorkload(cfg, {'id': 'proj-1', 'name': 'Project', 'clusterId': 'cluster-id'})
-
-        self.assertIsNone(result)
-
-    def test_skips_development_domains_containing_acdh_dev(self):
+    def test_keeps_development_domains_containing_acdh_dev(self):
         cfg = self.make_cfg(
             name='demo',
             publicEndpoints=[{'protocol': 'https', 'hostname': 'demo.acdh-dev.oeaw.ac.at'}],
@@ -92,9 +82,10 @@ class ProcessWorkloadTests(unittest.TestCase):
 
         result = self.rancher.processWorkload(cfg, {'id': 'proj-1', 'name': 'Project', 'clusterId': 'cluster-id'})
 
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['endpoint'], 'https://demo.acdh-dev.oeaw.ac.at')
 
-    def test_skips_development_domains_containing_acdh_ch_dev(self):
+    def test_keeps_development_domains_containing_acdh_ch_dev(self):
         cfg = self.make_cfg(
             name='demo',
             publicEndpoints=[{'protocol': 'https', 'hostname': 'demo.acdh-ch-dev.oeaw.ac.at'}],
@@ -102,21 +93,25 @@ class ProcessWorkloadTests(unittest.TestCase):
 
         result = self.rancher.processWorkload(cfg, {'id': 'proj-1', 'name': 'Project', 'clusterId': 'cluster-id'})
 
-        self.assertIsNone(result)
+        self.assertIsNotNone(result)
+        self.assertEqual(result['endpoint'], 'https://demo.acdh-ch-dev.oeaw.ac.at')
 
-    def test_keeps_deployment_and_filters_to_public_domains_when_mixed(self):
+    def test_keeps_deployment_and_collects_all_domains_when_mixed(self):
         cfg = self.make_cfg(
             name='demo',
             publicEndpoints=[
                 {'protocol': 'https', 'hostname': 'example.org'},
-                {'protocol': 'https', 'hostname': 'demo-dev.acdh.oeaw.ac.at'},
+                {'protocol': 'https', 'hostname': 'demo.acdh-dev.oeaw.ac.at'},
             ],
         )
 
         result = self.rancher.processWorkload(cfg, {'id': 'proj-1', 'name': 'Project', 'clusterId': 'cluster-id'})
 
         self.assertIsNotNone(result)
-        self.assertEqual(result['endpoint'], 'https://example.org')
+        self.assertEqual(
+            set(result['endpoint'].split('\n')),
+            {'https://example.org', 'https://demo.acdh-dev.oeaw.ac.at'},
+        )
 
 
 if __name__ == '__main__':

@@ -146,9 +146,6 @@ class Rancher(ICluster):
 
             for hostname in hostnames:
                 cleaned_hostname = hostname.split(':')[0].strip().lower()
-                if '-dev.acdh' in cleaned_hostname or '.acdh-dev' in cleaned_hostname or 'acdh-ch-dev' in cleaned_hostname:
-                    logging.info(f"Skipping development hostname {cleaned_hostname} for workload {name}")
-                    continue
                 if cleaned_hostname.startswith('le-'):
                     endpoint_domains.append(cleaned_hostname)
                     continue

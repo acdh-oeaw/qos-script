@@ -152,14 +152,14 @@ class Redmine(IBackend):
         return f'#{str(redmine_id)}'
 
     def _is_dev_domain(self, value):
-        """Return True for development hostnames that should be excluded from report tables."""
+        """Return True for development hostnames that should be excluded from specific report tables."""
         if not value:
             return False
         if isinstance(value, str):
             text = value.lower()
         else:
             text = str(value).lower()
-        return '-dev.acdh' in text or '.acdh-dev' in text or 'acdh-ch-dev' in text
+        return 'acdh-dev.' in text or 'acdh-ch-dev.' in text
 
     def _extract_field(self, text, field_name):
         """Extract a field value from formatted text like '* Name: value'."""

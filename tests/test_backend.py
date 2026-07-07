@@ -57,7 +57,7 @@ class SaveStructuredReportTests(unittest.TestCase):
         self.assertIn('#123', description)
         self.assertIn('#456', description)
 
-    def test_omits_duplicate_rows_with_dev_domains(self):
+    def test_omits_duplicate_rows_with_acdh_dev_domains(self):
         report = {
             'duplicates': [
                 {
@@ -67,7 +67,7 @@ class SaveStructuredReportTests(unittest.TestCase):
                     'namespace_1': 'ns',
                     'name_1': 'app-one',
                     'name_2': 'app-two',
-                    'endpoint': 'https://demo-dev.acdh.oeaw.ac.at',
+                    'endpoint': 'https://demo.acdh-dev.oeaw.ac.at',
                 },
                 {
                     'redmine_id': '456',
@@ -109,7 +109,7 @@ class SaveStructuredReportTests(unittest.TestCase):
 
         self.assertIn('|#789|demo-backend|backend.example.invalid|Backend|✗ down|-|-|-|-|', description)
 
-    def test_keeps_missing_redmine_ids_even_for_dev_domains(self):
+    def test_keeps_missing_redmine_ids_even_for_acdh_dev_domains(self):
         report = {
             'missing_id': [
                 {
@@ -117,7 +117,7 @@ class SaveStructuredReportTests(unittest.TestCase):
                     'users_short': 'User',
                     'namespace': 'ns',
                     'name': 'demo-service',
-                    'endpoint': 'https://demo-dev.acdh.oeaw.ac.at',
+                    'endpoint': 'https://demo.acdh-dev.oeaw.ac.at',
                 }
             ],
         }
