@@ -109,6 +109,26 @@ class SaveStructuredReportTests(unittest.TestCase):
 
         self.assertIn('|#789|demo-backend|backend.example.invalid|Backend|✗ down|-|-|-|-|', description)
 
+    def test_keeps_missing_redmine_ids_even_for_dev_domains(self):
+        report = {
+            'missing_id': [
+                {
+                    'project': 'Project',
+                    'users_short': 'User',
+                    'namespace': 'ns',
+                    'name': 'demo-service',
+                    'endpoint': 'https://demo-dev.acdh.oeaw.ac.at',
+                }
+            ],
+        }
+
+        self.redmine.saveStructuredReport(report)
+
+        description = self.redmine.session.calls[0][1]['issue']['description']
+
+        self.assertIn('demo-service', description)
+        self.assertIn('Missing Redmine ID', description)
+
     def test_omits_passing_services_and_marks_passed_checks(self):
         report = {
             'qos': [
