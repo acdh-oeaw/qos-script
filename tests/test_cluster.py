@@ -74,19 +74,29 @@ class ProcessWorkloadTests(unittest.TestCase):
 
         self.assertIsNone(result)
 
+    def test_skips_development_domains_containing_dev_acdh(self):
+        cfg = self.make_cfg(
+            name='demo',
+            publicEndpoints=[{'protocol': 'https', 'hostname': 'demo-dev.acdh.oeaw.ac.at'}],
+        )
+
+        result = self.rancher.processWorkload(cfg, {'id': 'proj-1', 'name': 'Project', 'clusterId': 'cluster-id'})
+
+        self.assertIsNone(result)
+
     def test_keeps_deployment_and_filters_to_public_domains_when_mixed(self):
         cfg = self.make_cfg(
             name='demo',
             publicEndpoints=[
-                {'protocol': 'https', 'hostname': 'demo.acdh-cluster-2.arz.oeaw.ac.at'},
-                {'protocol': 'https', 'hostname': 'demo.acdh-dev.oeaw.ac.at'},
+                {'protocol': 'https', 'hostname': 'example.org'},
+                {'protocol': 'https', 'hostname': 'demo-dev.acdh.oeaw.ac.at'},
             ],
         )
 
         result = self.rancher.processWorkload(cfg, {'id': 'proj-1', 'name': 'Project', 'clusterId': 'cluster-id'})
 
         self.assertIsNotNone(result)
-        self.assertEqual(result['endpoint'], 'https://demo.acdh-dev.oeaw.ac.at')
+        self.assertEqual(result['endpoint'], 'https://example.org')
 
 
 if __name__ == '__main__':

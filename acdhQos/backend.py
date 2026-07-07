@@ -145,6 +145,13 @@ class Redmine(IBackend):
             value = value[:200] + "..."
         return value
 
+    def _format_redmine_id(self, redmine_id):
+        """Render a Redmine issue reference as a clickable Textile link."""
+        if redmine_id in (None, ''):
+            return ''
+        issue_id = str(redmine_id)
+        return f'#{issue_id}":https://redmine.acdh.oeaw.ac.at/issues/{issue_id}'
+
     def _extract_field(self, text, field_name):
         """Extract a field value from formatted text like '* Name: value'."""
         match = re.search(rf'\*?{field_name}:\*?\s*(\S+)', text)
@@ -206,7 +213,7 @@ class Redmine(IBackend):
                 # Extract Redmine issue number from message
                 match = re.search(r'record (\d+)', msg)
                 issue_num = match.group(1) if match else '?'
-                desc += '|' + issue_num + '|' + msg[:200] + '|\n'
+                desc += '|' + self._format_redmine_id(issue_num) + '|' + msg[:200] + '|\n'
         
         # Section 3: QoS Checks
         if qos_results:
@@ -274,7 +281,7 @@ class Redmine(IBackend):
             desc += '|Redmine ID|Project|Users|Namespace|Deployment 1|Deployment 2|\n'
             for d in dupes:
                 desc += '|%s|%s|%s|%s|%s|%s|\n' % (
-                    self._sanitize_cell(d.get('redmine_id', '')),
+                    self._format_redmine_id(d.get('redmine_id', '')),
                     self._sanitize_cell(d.get('project', '')),
                     self._sanitize_cell(d.get('users_short', '')),
                     self._sanitize_cell(d.get('namespace_1', '')),
@@ -282,7 +289,7 @@ class Redmine(IBackend):
                     self._sanitize_cell(d.get('name_2', '')),
                 )
 
-        # Section 3: QoS Checks (only services with at least one non-PASS check)
+        # Section 3: QoS Checks (only services with at least one issue)
         qos = report.get('qos', [])
         if qos:
             qos_with_issues = [q for q in qos if any(
@@ -301,7 +308,7 @@ class Redmine(IBackend):
                         s = checks_map[check_name].get('status', '')
                         d = checks_map[check_name].get('details', '')
                         if s == 'PASS':
-                            return '!/images/true.png!'
+                            return '✓'
                         elif s == 'FAIL':
                             return '!/images/false.png!'
                         elif s == 'WARN':
@@ -320,7 +327,7 @@ class Redmine(IBackend):
                         s = r.get('status', '')
                         d = r.get('details', '')
                         if s == 'PASS':
-                            return '!/images/true.png!'
+                            return '✓'
                         elif s == 'FAIL':
                             return '!/images/false.png! ' + self._sanitize_cell(d)[:30]
                         elif s == 'SKIP':
@@ -333,14 +340,14 @@ class Redmine(IBackend):
 
                     if stype == 'Backend':
                         row = '|%s|%s|%s|Backend|%s| - | - | - | - |' % (
-                            self._sanitize_cell(q.get('redmine_id', '')),
+                            self._format_redmine_id(q.get('redmine_id', '')),
                             self._sanitize_cell(q.get('name', '')),
                             self._sanitize_cell(domain),
                             reachable_icon(),
                         )
                     else:
                         row = '|%s|%s|%s|%s|%s|%s|%s|%s|%s|' % (
-                            self._sanitize_cell(q.get('redmine_id', '')),
+                            self._format_redmine_id(q.get('redmine_id', '')),
                             self._sanitize_cell(q.get('name', '')),
                             self._sanitize_cell(domain),
                             stype,
