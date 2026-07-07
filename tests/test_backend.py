@@ -57,6 +57,37 @@ class SaveStructuredReportTests(unittest.TestCase):
         self.assertIn('#123":https://redmine.acdh.oeaw.ac.at/issues/123', description)
         self.assertIn('#456":https://redmine.acdh.oeaw.ac.at/issues/456', description)
 
+    def test_omits_duplicate_rows_with_dev_domains(self):
+        report = {
+            'duplicates': [
+                {
+                    'redmine_id': '123',
+                    'project': 'Project',
+                    'users_short': 'User',
+                    'namespace_1': 'ns',
+                    'name_1': 'app-one',
+                    'name_2': 'app-two',
+                    'endpoint': 'https://demo-dev.acdh.oeaw.ac.at',
+                },
+                {
+                    'redmine_id': '456',
+                    'project': 'Project',
+                    'users_short': 'User',
+                    'namespace_1': 'ns',
+                    'name_1': 'app-three',
+                    'name_2': 'app-four',
+                    'endpoint': 'https://demo.example.invalid',
+                },
+            ],
+        }
+
+        self.redmine.saveStructuredReport(report)
+
+        description = self.redmine.session.calls[0][1]['issue']['description']
+
+        self.assertNotIn('app-one', description)
+        self.assertIn('app-three', description)
+
     def test_omits_passing_services_and_marks_passed_checks(self):
         report = {
             'qos': [

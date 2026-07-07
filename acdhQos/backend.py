@@ -152,6 +152,16 @@ class Redmine(IBackend):
         issue_id = str(redmine_id)
         return f'#{issue_id}":https://redmine.acdh.oeaw.ac.at/issues/{issue_id}'
 
+    def _is_dev_domain(self, value):
+        """Return True for development hostnames that should be excluded from report tables."""
+        if not value:
+            return False
+        if isinstance(value, str):
+            text = value.lower()
+        else:
+            text = str(value).lower()
+        return '-dev.acdh' in text
+
     def _extract_field(self, text, field_name):
         """Extract a field value from formatted text like '* Name: value'."""
         match = re.search(rf'\*?{field_name}:\*?\s*(\S+)', text)
@@ -277,17 +287,25 @@ class Redmine(IBackend):
         # Section 2: Duplicate Redmine ID
         dupes = report.get('duplicates', [])
         if dupes:
-            desc += '\nh2. Duplicate Redmine ID\n\n'
-            desc += '|Redmine ID|Project|Users|Namespace|Deployment 1|Deployment 2|\n'
-            for d in dupes:
-                desc += '|%s|%s|%s|%s|%s|%s|\n' % (
-                    self._format_redmine_id(d.get('redmine_id', '')),
-                    self._sanitize_cell(d.get('project', '')),
-                    self._sanitize_cell(d.get('users_short', '')),
-                    self._sanitize_cell(d.get('namespace_1', '')),
-                    self._sanitize_cell(d.get('name_1', '')),
-                    self._sanitize_cell(d.get('name_2', '')),
+            filtered_dupes = [
+                d for d in dupes
+                if not any(
+                    self._is_dev_domain(d.get(field, ''))
+                    for field in ('endpoint', 'endpoint_1', 'endpoint_2', 'domain', 'domain_1', 'domain_2')
                 )
+            ]
+            if filtered_dupes:
+                desc += '\nh2. Duplicate Redmine ID\n\n'
+                desc += '|Redmine ID|Project|Users|Namespace|Deployment 1|Deployment 2|\n'
+                for d in filtered_dupes:
+                    desc += '|%s|%s|%s|%s|%s|%s|\n' % (
+                        self._format_redmine_id(d.get('redmine_id', '')),
+                        self._sanitize_cell(d.get('project', '')),
+                        self._sanitize_cell(d.get('users_short', '')),
+                        self._sanitize_cell(d.get('namespace_1', '')),
+                        self._sanitize_cell(d.get('name_1', '')),
+                        self._sanitize_cell(d.get('name_2', '')),
+                    )
 
         # Section 3: QoS Checks (only services with at least one issue)
         qos = report.get('qos', [])
