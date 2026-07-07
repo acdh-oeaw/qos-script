@@ -146,11 +146,10 @@ class Redmine(IBackend):
         return value
 
     def _format_redmine_id(self, redmine_id):
-        """Render a Redmine issue reference as a clickable Textile link."""
+        """Render a Redmine issue reference as plain text for Redmine auto-linking."""
         if redmine_id in (None, ''):
             return ''
-        issue_id = str(redmine_id)
-        return f'"#{issue_id}":https://redmine.acdh.oeaw.ac.at/issues/{issue_id}'
+        return f'#{str(redmine_id)}'
 
     def _is_dev_domain(self, value):
         """Return True for development hostnames that should be excluded from report tables."""

@@ -54,8 +54,8 @@ class SaveStructuredReportTests(unittest.TestCase):
 
         description = self.redmine.session.calls[0][1]['issue']['description']
 
-        self.assertIn('#123":https://redmine.acdh.oeaw.ac.at/issues/123', description)
-        self.assertIn('#456":https://redmine.acdh.oeaw.ac.at/issues/456', description)
+        self.assertIn('#123', description)
+        self.assertIn('#456', description)
 
     def test_omits_duplicate_rows_with_dev_domains(self):
         report = {
