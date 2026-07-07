@@ -88,6 +88,27 @@ class SaveStructuredReportTests(unittest.TestCase):
         self.assertNotIn('app-one', description)
         self.assertIn('app-three', description)
 
+    def test_backends_use_placeholders_for_unrun_checks(self):
+        report = {
+            'qos': [
+                {
+                    'redmine_id': '789',
+                    'name': 'demo-backend',
+                    'endpoint': 'https://backend.example.invalid',
+                    'service_type': 'Backend',
+                    'checks': [
+                        {'check': 'Reachability', 'status': 'FAIL', 'details': 'down'},
+                    ],
+                },
+            ],
+        }
+
+        self.redmine.saveStructuredReport(report)
+
+        description = self.redmine.session.calls[0][1]['issue']['description']
+
+        self.assertIn('|#789|demo-backend|backend.example.invalid|Backend|✗ down|-|-|-|-|', description)
+
     def test_omits_passing_services_and_marks_passed_checks(self):
         report = {
             'qos': [
@@ -127,7 +148,7 @@ class SaveStructuredReportTests(unittest.TestCase):
         self.assertNotIn('fully-passing', description)
         self.assertIn('mixed-results', description)
         self.assertIn('✓', description)
-        self.assertIn('!/images/false.png!', description)
+        self.assertIn('✗ missing', description)
 
 
 if __name__ == '__main__':

@@ -309,9 +309,12 @@ class Redmine(IBackend):
         # Section 3: QoS Checks (only services with at least one issue)
         qos = report.get('qos', [])
         if qos:
-            qos_with_issues = [q for q in qos if any(
-                c.get('status', '') in ('FAIL', 'WARN', 'SKIP') for c in q.get('checks', [])
-            )]
+            qos_with_issues = [
+                q for q in qos
+                if not self._is_dev_domain(q.get('endpoint', '')) and any(
+                    c.get('status', '') in ('FAIL', 'WARN', 'SKIP') for c in q.get('checks', [])
+                )
+            ]
             if qos_with_issues:
                 desc += '\nh2. QoS Checks\n\n'
                 desc += '|Redmine ID|Service|Domain|Type|Reachable|Logo|Helpdesk|Imprint|Accessibility|\n'
@@ -321,13 +324,16 @@ class Redmine(IBackend):
 
                     def icon(check_name):
                         if check_name not in checks_map:
-                            return ' - '
+                            return '-'
                         s = checks_map[check_name].get('status', '')
                         d = checks_map[check_name].get('details', '')
                         if s == 'PASS':
                             return '✓'
                         elif s == 'FAIL':
-                            return '!/images/false.png!'
+                            details = self._sanitize_cell(d)
+                            if details:
+                                return f'✗ {details[:120]}'
+                            return '✗'
                         elif s == 'WARN':
                             details = self._sanitize_cell(d)
                             if details:
@@ -336,8 +342,8 @@ class Redmine(IBackend):
                                 return '!/images/warning.png! ' + details[:120]
                             return '!/images/warning.png!'
                         elif s == 'SKIP':
-                            return 'SKIP'
-                        return ' - '
+                            return '-'
+                        return '-'
 
                     def reachable_icon():
                         r = checks_map.get('Reachability', {})
@@ -346,17 +352,22 @@ class Redmine(IBackend):
                         if s == 'PASS':
                             return '✓'
                         elif s == 'FAIL':
-                            return '!/images/false.png! ' + self._sanitize_cell(d)[:30]
+                            details = self._sanitize_cell(d)
+                            if details:
+                                return f'✗ {details[:30]}'
+                            return '✗'
                         elif s == 'SKIP':
-                            return 'SKIP ' + self._sanitize_cell(d)[:30]
-                        return ' - '
+                            if d:
+                                return f'- {self._sanitize_cell(d)[:30]}'
+                            return '-'
+                        return '-'
 
                     stype = q.get('service_type', 'Unknown')
                     endpoint = q.get('endpoint', '')
                     domain = endpoint.replace('https://', '').replace('http://', '').split('/')[0].split('\n')[0] if endpoint else ''
 
                     if stype == 'Backend':
-                        row = '|%s|%s|%s|Backend|%s| - | - | - | - |' % (
+                        row = '|%s|%s|%s|Backend|%s|-|-|-|-|' % (
                             self._format_redmine_id(q.get('redmine_id', '')),
                             self._sanitize_cell(q.get('name', '')),
                             self._sanitize_cell(domain),
